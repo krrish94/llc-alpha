@@ -1,0 +1,73 @@
+{
+  "path": "research/reports/17-m10-round-2/media/task_025x.mp4",
+  "record": "research/reports/17-m10-round-2/media/task_025x.json",
+  "frames": 1845,
+  "fps": 50,
+  "speed": 0.25,
+  "duration_s": 36.9,
+  "width": 2016,
+  "height": 750,
+  "resolution": [
+    2016,
+    750
+  ],
+  "view_size": [
+    480,
+    360
+  ],
+  "camera": "detail",
+  "title": "Task sequence, case task-test-013",
+  "plot_series": [
+    "pos_err",
+    "f_normal",
+    "tau2"
+  ],
+  "t_start": 0.0,
+  "t_end": 9.22,
+  "sample_step": 5,
+  "sample_rate_hz": 1000.0,
+  "posters": {
+    "first": "research/reports/17-m10-round-2/media/task_025x-first.png",
+    "middle": "research/reports/17-m10-round-2/media/task_025x-middle.png",
+    "last": "research/reports/17-m10-round-2/media/task_025x-last.png"
+  },
+  "episodes": [
+    {
+      "method": "pd_feedforward",
+      "label": "PD + inverse-dynamics feedforward",
+      "npz": "runs/m10r2/episodes_test/task-test-013__pd_feedforward.npz",
+      "sha256": "9a68d272355f2e6be1be089fc47be722e10f63fc1f79c7aa8fd433e71748effe",
+      "joint_rmse_mrad": 8.511733880876458,
+      "peak_normal_force_n": 97.74297375612784
+    },
+    {
+      "method": "distill_gain_ext",
+      "label": "Milestone 10 student",
+      "npz": "runs/m10r2/episodes_test/task-test-013__distill_gain_ext-s0.npz",
+      "sha256": "ca7d533d8ed6ba0ac77c952dd042db65ac2c973ea221cb8372b415a966d5a6bd",
+      "joint_rmse_mrad": 7.287312041286892,
+      "peak_normal_force_n": 27.067172657014524
+    },
+    {
+      "method": "distill_ff",
+      "label": "Round-2 student, oracle teacher",
+      "npz": "runs/m10r2/episodes_test/task-test-013__distill_ff-s0.npz",
+      "sha256": "dc7a18a89068e1236f908c3eddeb011f67442fca8740af7488824bf5151b4f58",
+      "joint_rmse_mrad": 5.6278940702499325,
+      "peak_normal_force_n": 93.02247213646447
+    },
+    {
+      "method": "distill_two",
+      "label": "Round-2 student, two teachers",
+      "npz": "runs/m10r2/episodes_test/task-test-013__distill_two-s0.npz",
+      "sha256": "2ffbfc1227c0e26e4bd5acbf7258818b4f1b75c4876516ff995f054d4b5ed1a1",
+      "joint_rmse_mrad": 5.684082458401611,
+      "peak_normal_force_n": 130.25509171727035
+    }
+  ],
+  "reference": "gray sphere: commanded tool position, q_ref through llc.sim.nominal.NominalModel",
+  "trace": "measured tool path over the last 0.5 s, gray (old) to method color (new)",
+  "metrics": "joint RMSE over all joints and samples from t = 0 to the displayed time (mrad); peak normal force so far (N)",
+  "scene": "llc/sim/assets/panda_2f85_0800.xml",
+  "render_seconds": 42.91
+}

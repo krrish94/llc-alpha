@@ -1,0 +1,10 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+runs/*
+!runs/*/
+runs/*/*
+!runs/*/*.sh
+research/site/
+MUJOCO_LOG.TXT

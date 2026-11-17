@@ -1,0 +1,439 @@
+<h2>Question</h2>
+<p>Before the learned controllers of the deep dive are trained, the conventional reference must be re-established under protocol v2: a fixed PD with gravity compensation, tuned on the new training distribution with robot instances, payloads and sensor noise, evaluated on the new families and on the held-out conditions. Two questions: what does a fixed PD do on references it cannot track (blocked targets, infeasible depths), and are the new compliance metrics well-posed, that is, can none of them be won by not tracking or not pressing?</p>
+
+<h2>Erratum</h2>
+<p><strong>Erratum 2 (2026-11-16, blocked family).</strong> The blocked-reference generator tested 'inside the surface' with the wrong sign for the table surface (60% of the blocked references, ADR 0007): those references had empty blocked and release phases, so their training windows in reports D2 to D4 contained no block at all (they started at the end of the reference), and their recovery metric was undefined and counted as zero in the composite. The generator is fixed, the reference pools were rebuilt and the test tables of this report were regenerated from the corrected cases. For the tuned PD the blocked composite moves from 7.10 to 7.62 and the recovery after release is now defined on all 16 cases (0.33 s) instead of the 6 wall cases; the other families are unchanged.</p>
+<p><strong>Erratum 3 (2026-11-16, wall surface).</strong> In the wall branch of the blocked and contact families the tool pointed 50 to 70 degrees below horizontal with targets up to 8 cm inside the wall, so the hand and the forearm reached the wall before the tool: link contact during 65 to 85% of the blocked phase, and in three of seven wall validation cases the tool never touched the wall. Those cases measured unsensed link collisions. The generators now tilt the tool 30 to 45 degrees, place wall targets 3 to 6 cm deep and reject any reference whose deepest pose brings a link within 2 cm of the wall (ADR 0007); PD rollouts confirm tool contact for 93 to 98% of the blocked phase and no link contact. The tables of this report were regenerated a second time from the corrected wall cases; the wall cases are now harder (the tuned PD pushes with 50 to 200 N against the wall): the PD's blocked composite moves from 7.62 to 9.09 and its contact composite from 7.07 to 7.16.</p>
+<p>The numbers in this report were first produced (2026-11-15) by an evaluation harness that simulated the nominal robot for every case, ignoring the case's instance and payload (ADR 0005, erratum of 2026-11-16). The shared gains were therefore tuned on the nominal robot; they are kept as the fixed baseline of the deep dive. The tables and figures below were regenerated with the corrected harness, in which each case runs on its own robot instance, payload and sensor noise; the superseded numbers are kept in <code>runs/d1/metrics_test_nominal_plant.json</code>.</p>
+
+<h2>Setup</h2>
+<p>Protocol v2 (<a href="../protocols/evaluation-v2/index.html">evaluation-v2</a>, <a href="../adr/index.html">ADR 0005</a>): 1 kHz control with zero compute latency; 8 fixed robot instances with 0.1 mrad position noise; payloads from {0, 1, 2} kg; families hold, free, policy, step, contact2, blocked and task; held-out groups for workspace, speed, payload and instance deviations. The shared PD is re-tuned by CMA-ES with the Milestone 1 parameterization and budget (population 12, 40 iterations) on 4 tune cases per family against the protocol v2 composite, which now includes excess force above 30 N, a press-phase requirement and feasible-direction tracking. The protocol v1 gains (tuned without these terms, without instances and without blocked references) are evaluated alongside.</p>
+<p>Tuned gains. Protocol v2: stiffness 377, 165, 395, 141, 239, 47, 113 Nm/rad, damping ratio 0.69. Protocol v1: 1447, 766, 1656, 1190, 593, 553, 111 Nm/rad, damping ratio 0.65. The v2 optimum is two to eight times softer on the gravity-loaded joints.</p>
+
+<h2>Representative episodes</h2>
+<p>One case per family, selected as the median composite of the protocol v2 PD, so the clips are typical rather than favourable. Both gain sets track the identical reference; the gray sphere is the commanded tool position through the nominal model. Contact families are also shown at quarter speed.</p>
+<figure class="video wide" id="fig-video-hold_100x">
+<video id="fig-video-hold_100x-video" controls preload="metadata" poster="media/hold_100x-middle.png">
+<source src="media/hold_100x.mp4" type="video/mp4">
+<p class="missing">Video playback is not supported here; <a href="media/hold_100x.mp4">download the video (MP4)</a>.</p>
+</video>
+<div class="widget timeseries" data-widget="timeseries" data-src="data/ts_hold.json" data-video="fig-video-hold_100x-video" data-video-speed="1">
+<div class="widget-body">
+<p class="missing">No static figure for this viewer; the interactive view needs JavaScript.</p>
+</div>
+</div>
+<figcaption>Hold: representative case hold-test-003 (median composite of the shared PD) at 1x; the gray sphere is the commanded tool position, metrics accumulate causally; the plot cursor follows the video. <a class="source" href="media/hold_100x.mp4">Video (MP4)</a> <a class="source" href="data/ts_hold.json">Data (JSON)</a></figcaption>
+</figure>
+<figure class="video wide" id="fig-video-free_100x">
+<video id="fig-video-free_100x-video" controls preload="metadata" poster="media/free_100x-middle.png">
+<source src="media/free_100x.mp4" type="video/mp4">
+<p class="missing">Video playback is not supported here; <a href="media/free_100x.mp4">download the video (MP4)</a>.</p>
+</video>
+<div class="widget timeseries" data-widget="timeseries" data-src="data/ts_free.json" data-video="fig-video-free_100x-video" data-video-speed="1">
+<div class="widget-body">
+<p class="missing">No static figure for this viewer; the interactive view needs JavaScript.</p>
+</div>
+</div>
+<figcaption>Free joint-space motion: representative case free-test-002 (median composite of the shared PD) at 1x; the gray sphere is the commanded tool position, metrics accumulate causally; the plot cursor follows the video. <a class="source" href="media/free_100x.mp4">Video (MP4)</a> <a class="source" href="data/ts_free.json">Data (JSON)</a></figcaption>
+</figure>
+<figure class="video wide" id="fig-video-policy_100x">
+<video id="fig-video-policy_100x-video" controls preload="metadata" poster="media/policy_100x-middle.png">
+<source src="media/policy_100x.mp4" type="video/mp4">
+<p class="missing">Video playback is not supported here; <a href="media/policy_100x.mp4">download the video (MP4)</a>.</p>
+</video>
+<div class="widget timeseries" data-widget="timeseries" data-src="data/ts_policy.json" data-video="fig-video-policy_100x-video" data-video-speed="1">
+<div class="widget-body">
+<p class="missing">No static figure for this viewer; the interactive view needs JavaScript.</p>
+</div>
+</div>
+<figcaption>Policy-like targets: representative case policy-test-010 (median composite of the shared PD) at 1x; the gray sphere is the commanded tool position, metrics accumulate causally; the plot cursor follows the video. <a class="source" href="media/policy_100x.mp4">Video (MP4)</a> <a class="source" href="data/ts_policy.json">Data (JSON)</a></figcaption>
+</figure>
+<figure class="video wide" id="fig-video-step_100x">
+<video id="fig-video-step_100x-video" controls preload="metadata" poster="media/step_100x-middle.png">
+<source src="media/step_100x.mp4" type="video/mp4">
+<p class="missing">Video playback is not supported here; <a href="media/step_100x.mp4">download the video (MP4)</a>.</p>
+</video>
+<div class="widget timeseries" data-widget="timeseries" data-src="data/ts_step.json" data-video="fig-video-step_100x-video" data-video-speed="1">
+<div class="widget-body">
+<p class="missing">No static figure for this viewer; the interactive view needs JavaScript.</p>
+</div>
+</div>
+<figcaption>Step targets: representative case step-test-011 (median composite of the shared PD) at 1x; the gray sphere is the commanded tool position, metrics accumulate causally; the plot cursor follows the video. <a class="source" href="media/step_100x.mp4">Video (MP4)</a> <a class="source" href="data/ts_step.json">Data (JSON)</a></figcaption>
+</figure>
+<figure class="video wide" id="fig-video-contact2_100x">
+<video id="fig-video-contact2_100x-video" controls preload="metadata" poster="media/contact2_100x-middle.png">
+<source src="media/contact2_100x.mp4" type="video/mp4">
+<p class="missing">Video playback is not supported here; <a href="media/contact2_100x.mp4">download the video (MP4)</a>.</p>
+</video>
+<div class="widget timeseries" data-widget="timeseries" data-src="data/ts_contact2.json" data-video="fig-video-contact2_100x-video" data-video-speed="1">
+<div class="widget-body">
+<p class="missing">No static figure for this viewer; the interactive view needs JavaScript.</p>
+</div>
+</div>
+<figcaption>Contact: representative case contact2-test-002 (median composite of the shared PD) at 1x; the gray sphere is the commanded tool position, metrics accumulate causally; the plot cursor follows the video. <a class="source" href="media/contact2_100x.mp4">Video (MP4)</a> <a class="source" href="data/ts_contact2.json">Data (JSON)</a></figcaption>
+</figure>
+<figure class="video wide" id="fig-video-contact2_025x">
+<video id="fig-video-contact2_025x-video" controls preload="metadata" poster="media/contact2_025x-middle.png">
+<source src="media/contact2_025x.mp4" type="video/mp4">
+<p class="missing">Video playback is not supported here; <a href="media/contact2_025x.mp4">download the video (MP4)</a>.</p>
+</video>
+<div class="widget timeseries" data-widget="timeseries" data-src="data/ts_contact2.json" data-video="fig-video-contact2_025x-video" data-video-speed="0.25">
+<div class="widget-body">
+<p class="missing">No static figure for this viewer; the interactive view needs JavaScript.</p>
+</div>
+</div>
+<figcaption>Contact: representative case contact2-test-002 (median composite of the shared PD) at 0.25x; the gray sphere is the commanded tool position, metrics accumulate causally; the plot cursor follows the video. <a class="source" href="media/contact2_025x.mp4">Video (MP4)</a> <a class="source" href="data/ts_contact2.json">Data (JSON)</a></figcaption>
+</figure>
+<figure class="video wide" id="fig-video-blocked_100x">
+<video id="fig-video-blocked_100x-video" controls preload="metadata" poster="media/blocked_100x-middle.png">
+<source src="media/blocked_100x.mp4" type="video/mp4">
+<p class="missing">Video playback is not supported here; <a href="media/blocked_100x.mp4">download the video (MP4)</a>.</p>
+</video>
+<div class="widget timeseries" data-widget="timeseries" data-src="data/ts_blocked.json" data-video="fig-video-blocked_100x-video" data-video-speed="1">
+<div class="widget-body">
+<p class="missing">No static figure for this viewer; the interactive view needs JavaScript.</p>
+</div>
+</div>
+<figcaption>Blocked reference: representative case blocked-test-013 (median composite of the shared PD) at 1x; the gray sphere is the commanded tool position, metrics accumulate causally; the plot cursor follows the video. <a class="source" href="media/blocked_100x.mp4">Video (MP4)</a> <a class="source" href="data/ts_blocked.json">Data (JSON)</a></figcaption>
+</figure>
+<figure class="video wide" id="fig-video-blocked_025x">
+<video id="fig-video-blocked_025x-video" controls preload="metadata" poster="media/blocked_025x-middle.png">
+<source src="media/blocked_025x.mp4" type="video/mp4">
+<p class="missing">Video playback is not supported here; <a href="media/blocked_025x.mp4">download the video (MP4)</a>.</p>
+</video>
+<div class="widget timeseries" data-widget="timeseries" data-src="data/ts_blocked.json" data-video="fig-video-blocked_025x-video" data-video-speed="0.25">
+<div class="widget-body">
+<p class="missing">No static figure for this viewer; the interactive view needs JavaScript.</p>
+</div>
+</div>
+<figcaption>Blocked reference: representative case blocked-test-013 (median composite of the shared PD) at 0.25x; the gray sphere is the commanded tool position, metrics accumulate causally; the plot cursor follows the video. <a class="source" href="media/blocked_025x.mp4">Video (MP4)</a> <a class="source" href="data/ts_blocked.json">Data (JSON)</a></figcaption>
+</figure>
+<figure class="video wide" id="fig-video-task_100x">
+<video id="fig-video-task_100x-video" controls preload="metadata" poster="media/task_100x-middle.png">
+<source src="media/task_100x.mp4" type="video/mp4">
+<p class="missing">Video playback is not supported here; <a href="media/task_100x.mp4">download the video (MP4)</a>.</p>
+</video>
+<div class="widget timeseries" data-widget="timeseries" data-src="data/ts_task.json" data-video="fig-video-task_100x-video" data-video-speed="1">
+<div class="widget-body">
+<p class="missing">No static figure for this viewer; the interactive view needs JavaScript.</p>
+</div>
+</div>
+<figcaption>Task sequence: representative case task-test-013 (median composite of the shared PD) at 1x; the gray sphere is the commanded tool position, metrics accumulate causally; the plot cursor follows the video. <a class="source" href="media/task_100x.mp4">Video (MP4)</a> <a class="source" href="data/ts_task.json">Data (JSON)</a></figcaption>
+</figure>
+<figure class="video wide" id="fig-video-task_025x">
+<video id="fig-video-task_025x-video" controls preload="metadata" poster="media/task_025x-middle.png">
+<source src="media/task_025x.mp4" type="video/mp4">
+<p class="missing">Video playback is not supported here; <a href="media/task_025x.mp4">download the video (MP4)</a>.</p>
+</video>
+<div class="widget timeseries" data-widget="timeseries" data-src="data/ts_task.json" data-video="fig-video-task_025x-video" data-video-speed="0.25">
+<div class="widget-body">
+<p class="missing">No static figure for this viewer; the interactive view needs JavaScript.</p>
+</div>
+</div>
+<figcaption>Task sequence: representative case task-test-013 (median composite of the shared PD) at 0.25x; the gray sphere is the commanded tool position, metrics accumulate causally; the plot cursor follows the video. <a class="source" href="media/task_025x.mp4">Video (MP4)</a> <a class="source" href="data/ts_task.json">Data (JSON)</a></figcaption>
+</figure>
+
+<h2>Summary over groups</h2>
+<p>No case diverged in any group. The v2 PD is the compliant end of the trade-off and the v1 PD the accurate end; the held-out groups preserve this ordering everywhere. All numbers from the corrected harness (each case on its own instance, payload and sensor noise); the gain sets themselves were tuned on the nominal robot.</p><table>
+<caption>Means over all cases of a group (every regime of the group pooled). The composites are tuning and selection objectives, not research signals; the cap columns follow ADR 0007.</caption>
+<thead>
+<tr><th>Group</th><th>Controller</th><th class="num">Composite v2</th><th class="num">Composite (15 N cap)</th><th class="num">Excess force above 30 N (N)</th><th class="num">Excess force above 15 N (N)</th><th class="num">Peak force (N)</th><th class="num">Sustained peak, 20 ms (N)</th><th class="num">Position RMSE (rad)</th><th class="num">Diverged</th></tr>
+</thead>
+<tbody>
+<tr><td>In-distribution families</td><td>PD, shared gains (protocol v2 tuning)</td><td class="num">4.29</td><td class="num">5.95</td><td class="num">6.53</td><td class="num">10.4</td><td class="num">142</td><td class="num">81.3</td><td class="num">0.0314</td><td class="num">0</td></tr>
+<tr><td>In-distribution families</td><td>PD, shared gains of protocol v1</td><td class="num">5.8</td><td class="num">11</td><td class="num">32.4</td><td class="num">38.2</td><td class="num">182</td><td class="num">155</td><td class="num">0.019</td><td class="num">0</td></tr>
+<tr><td>Held-out workspace (base yaw 1.2 to 2.6 rad)</td><td>PD, shared gains (protocol v2 tuning)</td><td class="num">1.62</td><td class="num">1.62</td><td class="num">0</td><td class="num">0</td><td class="num">—</td><td class="num">—</td><td class="num">0.0417</td><td class="num">0</td></tr>
+<tr><td>Held-out workspace (base yaw 1.2 to 2.6 rad)</td><td>PD, shared gains of protocol v1</td><td class="num">1.61</td><td class="num">1.61</td><td class="num">0</td><td class="num">0</td><td class="num">—</td><td class="num">—</td><td class="num">0.0203</td><td class="num">0</td></tr>
+<tr><td>Speed x1.5</td><td>PD, shared gains (protocol v2 tuning)</td><td class="num">4.33</td><td class="num">5.41</td><td class="num">3.4</td><td class="num">6.91</td><td class="num">296</td><td class="num">132</td><td class="num">0.0356</td><td class="num">0</td></tr>
+<tr><td>Speed x1.5</td><td>PD, shared gains of protocol v1</td><td class="num">4.07</td><td class="num">6.69</td><td class="num">12.2</td><td class="num">18.6</td><td class="num">265</td><td class="num">143</td><td class="num">0.0171</td><td class="num">0</td></tr>
+<tr><td>Speed x2</td><td>PD, shared gains (protocol v2 tuning)</td><td class="num">4.77</td><td class="num">5.81</td><td class="num">4.19</td><td class="num">7.54</td><td class="num">358</td><td class="num">150</td><td class="num">0.0416</td><td class="num">0</td></tr>
+<tr><td>Speed x2</td><td>PD, shared gains of protocol v1</td><td class="num">4.32</td><td class="num">6.61</td><td class="num">10.6</td><td class="num">16.5</td><td class="num">323</td><td class="num">159</td><td class="num">0.0208</td><td class="num">0</td></tr>
+<tr><td>Payload 3 kg</td><td>PD, shared gains (protocol v2 tuning)</td><td class="num">9.9</td><td class="num">13.6</td><td class="num">19</td><td class="num">27.3</td><td class="num">235</td><td class="num">120</td><td class="num">0.0565</td><td class="num">0</td></tr>
+<tr><td>Payload 3 kg</td><td>PD, shared gains of protocol v1</td><td class="num">10</td><td class="num">20.1</td><td class="num">62.5</td><td class="num">73.5</td><td class="num">214</td><td class="num">173</td><td class="num">0.0168</td><td class="num">0</td></tr>
+<tr><td>Held-out robot instances (doubled deviations)</td><td>PD, shared gains (protocol v2 tuning)</td><td class="num">4.48</td><td class="num">6.34</td><td class="num">6.78</td><td class="num">11.7</td><td class="num">165</td><td class="num">93.1</td><td class="num">0.0348</td><td class="num">0</td></tr>
+<tr><td>Held-out robot instances (doubled deviations)</td><td>PD, shared gains of protocol v1</td><td class="num">8.43</td><td class="num">16.2</td><td class="num">50.7</td><td class="num">57.7</td><td class="num">246</td><td class="num">197</td><td class="num">0.0212</td><td class="num">0</td></tr>
+</tbody>
+</table>
+
+<h2>In-distribution families</h2>
+<p>Sixteen cases per family on the 8 instances with payloads of 0, 1 or 2 kg.</p><table class="wide">
+<caption>In-distribution families: primary metrics (mean over cases; paired difference against PD with shared gains, starred when the 95% bootstrap interval excludes zero).</caption>
+<thead>
+<tr><th>Regime</th><th>Metric</th><th class="num">PD, shared gains (protocol v2 tuning)</th><th class="num">PD, shared gains of protocol v1</th></tr>
+</thead>
+<tbody>
+<tr><td>Hold</td><td>Position RMSE (rad)</td><td class="num">0.0167</td><td class="num">0.00281 (-0.014*)</td></tr>
+<tr><td>Hold</td><td>Peak deflection under 10 N pulse (m)</td><td class="num">0.016</td><td class="num">0.00448 (-0.012*)</td></tr>
+<tr><td>Hold</td><td>Torque rate RMS (Nm/s)</td><td class="num">48.7</td><td class="num">169 (1.2e+02*)</td></tr>
+<tr><td>Free joint-space motion</td><td>Position RMSE (rad)</td><td class="num">0.0191</td><td class="num">0.00346 (-0.016*)</td></tr>
+<tr><td>Free joint-space motion</td><td>Torque rate RMS (Nm/s)</td><td class="num">52.9</td><td class="num">174 (1.2e+02*)</td></tr>
+<tr><td>Policy-like targets</td><td>Position RMSE (rad)</td><td class="num">0.0553</td><td class="num">0.0333 (-0.022*)</td></tr>
+<tr><td>Policy-like targets</td><td>Torque rate RMS (Nm/s)</td><td class="num">1.77e+03</td><td class="num">4.89e+03 (3.1e+03*)</td></tr>
+<tr><td>Step targets</td><td>Position RMSE (rad)</td><td class="num">0.0444</td><td class="num">0.0325 (-0.012*)</td></tr>
+<tr><td>Step targets</td><td>Settling time after step (s)</td><td class="num">0.663</td><td class="num">0.192 (-0.47*)</td></tr>
+<tr><td>Step targets</td><td>Step overshoot (-)</td><td class="num">0.0176</td><td class="num">0.0534 (0.036*)</td></tr>
+<tr><td>Contact (tilt, depth, slide)</td><td>Excess contact force above 30 N (mean while in contact) (N)</td><td class="num">8.95</td><td class="num">51.6 (43*)</td></tr>
+<tr><td>Contact (tilt, depth, slide)</td><td>Excess contact force above the 15 N cap (mean while in contact) (N)</td><td class="num">16.1</td><td class="num">64.8 (49*)</td></tr>
+<tr><td>Contact (tilt, depth, slide)</td><td>Peak normal force (N)</td><td class="num">169</td><td class="num">234 (64*)</td></tr>
+<tr><td>Contact (tilt, depth, slide)</td><td>Peak of the 20 ms low-pass filtered normal force (sustained force) (N)</td><td class="num">88.8</td><td class="num">165 (76*)</td></tr>
+<tr><td>Contact (tilt, depth, slide)</td><td>Feasible-direction tool error (m)</td><td class="num">0.0403</td><td class="num">0.0227 (-0.018*)</td></tr>
+<tr><td>Contact (tilt, depth, slide)</td><td>Press-phase force deficit below 5 N (N)</td><td class="num">1.39</td><td class="num">0 (-1.4*)</td></tr>
+<tr><td>Contact (tilt, depth, slide)</td><td>Contact losses of 5 ms or more during contact phase (-)</td><td class="num">9.5</td><td class="num">0.125 (-9.4*)</td></tr>
+<tr><td>Contact (tilt, depth, slide)</td><td>Contact losses of 5 ms or more per second of press phase (1/s)</td><td class="num">4.33</td><td class="num">0.0715 (-4.3*)</td></tr>
+<tr><td>Blocked reference</td><td>Excess contact force above 30 N (mean while in contact) (N)</td><td class="num">32.7</td><td class="num">161 (1.3e+02*)</td></tr>
+<tr><td>Blocked reference</td><td>Excess contact force above the 15 N cap (mean while in contact) (N)</td><td class="num">45.6</td><td class="num">176 (1.3e+02*)</td></tr>
+<tr><td>Blocked reference</td><td>Peak normal force (N)</td><td class="num">134</td><td class="num">252 (1.2e+02*)</td></tr>
+<tr><td>Blocked reference</td><td>Peak of the 20 ms low-pass filtered normal force (sustained force) (N)</td><td class="num">90.4</td><td class="num">243 (1.5e+02*)</td></tr>
+<tr><td>Blocked reference</td><td>Feasible-direction tool error (m)</td><td class="num">0.0376</td><td class="num">0.0178 (-0.02*)</td></tr>
+<tr><td>Blocked reference</td><td>Recovery after a blocked reference returns (s)</td><td class="num">0.367</td><td class="num">0.0676 (-0.3*)</td></tr>
+<tr><td>Blocked reference</td><td>Apparent stiffness: mean normal force per metre of reference depth while blocked (after the first 0.3 s of contact) (N/m)</td><td class="num">1.18e+03</td><td class="num">4.2e+03 (3e+03*)</td></tr>
+<tr><td>Task sequence</td><td>Excess contact force above 30 N (mean while in contact) (N)</td><td class="num">3.86</td><td class="num">10 (6.2*)</td></tr>
+<tr><td>Task sequence</td><td>Excess contact force above the 15 N cap (mean while in contact) (N)</td><td class="num">10.7</td><td class="num">21.8 (11*)</td></tr>
+<tr><td>Task sequence</td><td>Peak normal force (N)</td><td class="num">123</td><td class="num">61.4 (-61*)</td></tr>
+<tr><td>Task sequence</td><td>Peak of the 20 ms low-pass filtered normal force (sustained force) (N)</td><td class="num">64.7</td><td class="num">56.1 (-8.6)</td></tr>
+<tr><td>Task sequence</td><td>Feasible-direction tool error (m)</td><td class="num">0.0241</td><td class="num">0.00604 (-0.018*)</td></tr>
+<tr><td>Task sequence</td><td>Press-phase force deficit below 5 N (N)</td><td class="num">0.244</td><td class="num">0 (-0.24*)</td></tr>
+<tr><td>Task sequence</td><td>Contact losses of 5 ms or more per second of press phase (1/s)</td><td class="num">11.7</td><td class="num">0 (-12*)</td></tr>
+</tbody>
+</table><figure class="widget compare" id="fig-compare-in_distribution" data-widget="compare" data-src="data/compare_in_distribution.json" data-regime="hold" data-metric="pos_rmse">
+<div class="widget-body">
+<p class="selection">Selection: Hold, Position RMSE (rad); n = 16 cases. Mean with 95% bootstrap CI (1000 resamples); difference vs PD, shared gains (protocol v2 tuning) is paired by case, failed cases dropped from the pair.</p>
+<table class="compare-table">
+<thead>
+<tr><th>Method</th><th class="num">Mean</th><th class="num">95% CI</th><th class="num">n</th><th class="num">Δ vs reference</th><th class="num">95% CI (paired)</th><th class="num">Pairs</th></tr>
+</thead>
+<tbody>
+<tr><td>PD, shared gains (protocol v2 tuning)</td><td class="num">0.01671</td><td class="num">[0.01252, 0.02065]</td><td class="num">16</td><td class="num">reference</td><td class="num">—</td><td class="num">—</td></tr>
+<tr><td>PD, shared gains of protocol v1</td><td class="num">0.002815</td><td class="num">[0.002149, 0.003561]</td><td class="num">16</td><td class="num">-0.01389</td><td class="num">[-0.01728, -0.01063]</td><td class="num">16</td></tr>
+</tbody>
+</table>
+</div>
+<figcaption>In-distribution families: per-case values; dots are cases, the tick the mean, the bar its 95% bootstrap interval. <a class="source" href="data/compare_in_distribution.json">Data (JSON)</a></figcaption>
+</figure>
+
+<h2>Held-out workspace (base yaw 1.2 to 2.6 rad)</h2>
+<table class="wide">
+<caption>Held-out workspace (base yaw 1.2 to 2.6 rad): primary metrics (mean over cases; paired difference against PD with shared gains, starred when the 95% bootstrap interval excludes zero).</caption>
+<thead>
+<tr><th>Regime</th><th>Metric</th><th class="num">PD, shared gains (protocol v2 tuning)</th><th class="num">PD, shared gains of protocol v1</th></tr>
+</thead>
+<tbody>
+<tr><td>Free joint-space motion</td><td>Position RMSE (rad)</td><td class="num">0.0263</td><td class="num">0.00461 (-0.022*)</td></tr>
+<tr><td>Free joint-space motion</td><td>Torque rate RMS (Nm/s)</td><td class="num">54.7</td><td class="num">177 (1.2e+02*)</td></tr>
+<tr><td>Policy-like targets</td><td>Position RMSE (rad)</td><td class="num">0.0572</td><td class="num">0.0359 (-0.021*)</td></tr>
+<tr><td>Policy-like targets</td><td>Torque rate RMS (Nm/s)</td><td class="num">1.82e+03</td><td class="num">5.23e+03 (3.4e+03*)</td></tr>
+</tbody>
+</table><figure class="widget compare" id="fig-compare-heldout_workspace" data-widget="compare" data-src="data/compare_heldout_workspace.json" data-regime="free" data-metric="pos_rmse">
+<div class="widget-body">
+<p class="selection">Selection: Free joint-space motion, Position RMSE (rad); n = 8 cases. Mean with 95% bootstrap CI (1000 resamples); difference vs PD, shared gains (protocol v2 tuning) is paired by case, failed cases dropped from the pair.</p>
+<table class="compare-table">
+<thead>
+<tr><th>Method</th><th class="num">Mean</th><th class="num">95% CI</th><th class="num">n</th><th class="num">Δ vs reference</th><th class="num">95% CI (paired)</th><th class="num">Pairs</th></tr>
+</thead>
+<tbody>
+<tr><td>PD, shared gains (protocol v2 tuning)</td><td class="num">0.02628</td><td class="num">[0.01836, 0.03486]</td><td class="num">8</td><td class="num">reference</td><td class="num">—</td><td class="num">—</td></tr>
+<tr><td>PD, shared gains of protocol v1</td><td class="num">0.004607</td><td class="num">[0.00306, 0.006442]</td><td class="num">8</td><td class="num">-0.02167</td><td class="num">[-0.02766, -0.0152]</td><td class="num">8</td></tr>
+</tbody>
+</table>
+</div>
+<figcaption>Held-out workspace (base yaw 1.2 to 2.6 rad): per-case values; dots are cases, the tick the mean, the bar its 95% bootstrap interval. <a class="source" href="data/compare_heldout_workspace.json">Data (JSON)</a></figcaption>
+</figure>
+
+<h2>Speed x1.5</h2>
+<table class="wide">
+<caption>Speed x1.5: primary metrics (mean over cases; paired difference against PD with shared gains, starred when the 95% bootstrap interval excludes zero).</caption>
+<thead>
+<tr><th>Regime</th><th>Metric</th><th class="num">PD, shared gains (protocol v2 tuning)</th><th class="num">PD, shared gains of protocol v1</th></tr>
+</thead>
+<tbody>
+<tr><td>Free joint-space motion</td><td>Position RMSE (rad)</td><td class="num">0.0248</td><td class="num">0.00638 (-0.018*)</td></tr>
+<tr><td>Free joint-space motion</td><td>Torque rate RMS (Nm/s)</td><td class="num">63.4</td><td class="num">177 (1.1e+02*)</td></tr>
+<tr><td>Policy-like targets</td><td>Position RMSE (rad)</td><td class="num">0.0777</td><td class="num">0.0423 (-0.035*)</td></tr>
+<tr><td>Policy-like targets</td><td>Torque rate RMS (Nm/s)</td><td class="num">1.95e+03</td><td class="num">5.6e+03 (3.6e+03*)</td></tr>
+<tr><td>Contact (tilt, depth, slide)</td><td>Excess contact force above 30 N (mean while in contact) (N)</td><td class="num">8.14</td><td class="num">38 (30*)</td></tr>
+<tr><td>Contact (tilt, depth, slide)</td><td>Excess contact force above the 15 N cap (mean while in contact) (N)</td><td class="num">14.5</td><td class="num">51.1 (37*)</td></tr>
+<tr><td>Contact (tilt, depth, slide)</td><td>Peak normal force (N)</td><td class="num">295</td><td class="num">427 (1.3e+02*)</td></tr>
+<tr><td>Contact (tilt, depth, slide)</td><td>Peak of the 20 ms low-pass filtered normal force (sustained force) (N)</td><td class="num">136</td><td class="num">210 (75*)</td></tr>
+<tr><td>Contact (tilt, depth, slide)</td><td>Feasible-direction tool error (m)</td><td class="num">0.0299</td><td class="num">0.0156 (-0.014*)</td></tr>
+<tr><td>Contact (tilt, depth, slide)</td><td>Press-phase force deficit below 5 N (N)</td><td class="num">1.1</td><td class="num">0 (-1.1*)</td></tr>
+<tr><td>Contact (tilt, depth, slide)</td><td>Contact losses of 5 ms or more during contact phase (-)</td><td class="num">17.9</td><td class="num">4.12 (-14*)</td></tr>
+<tr><td>Contact (tilt, depth, slide)</td><td>Contact losses of 5 ms or more per second of press phase (1/s)</td><td class="num">10.7</td><td class="num">2.63 (-8.1*)</td></tr>
+<tr><td>Task sequence</td><td>Excess contact force above 30 N (mean while in contact) (N)</td><td class="num">5.47</td><td class="num">10.6 (5.1*)</td></tr>
+<tr><td>Task sequence</td><td>Excess contact force above the 15 N cap (mean while in contact) (N)</td><td class="num">13.1</td><td class="num">23.4 (10*)</td></tr>
+<tr><td>Task sequence</td><td>Peak normal force (N)</td><td class="num">298</td><td class="num">103 (-1.9e+02*)</td></tr>
+<tr><td>Task sequence</td><td>Peak of the 20 ms low-pass filtered normal force (sustained force) (N)</td><td class="num">129</td><td class="num">74.8 (-54*)</td></tr>
+<tr><td>Task sequence</td><td>Feasible-direction tool error (m)</td><td class="num">0.0267</td><td class="num">0.007 (-0.02*)</td></tr>
+<tr><td>Task sequence</td><td>Press-phase force deficit below 5 N (N)</td><td class="num">0</td><td class="num">0 (0)</td></tr>
+<tr><td>Task sequence</td><td>Contact losses of 5 ms or more per second of press phase (1/s)</td><td class="num">14.3</td><td class="num">0 (-14*)</td></tr>
+</tbody>
+</table><figure class="widget compare" id="fig-compare-speed_x1.5" data-widget="compare" data-src="data/compare_speed_x1.5.json" data-regime="free" data-metric="pos_rmse">
+<div class="widget-body">
+<p class="selection">Selection: Free joint-space motion, Position RMSE (rad); n = 8 cases. Mean with 95% bootstrap CI (1000 resamples); difference vs PD, shared gains (protocol v2 tuning) is paired by case, failed cases dropped from the pair.</p>
+<table class="compare-table">
+<thead>
+<tr><th>Method</th><th class="num">Mean</th><th class="num">95% CI</th><th class="num">n</th><th class="num">Δ vs reference</th><th class="num">95% CI (paired)</th><th class="num">Pairs</th></tr>
+</thead>
+<tbody>
+<tr><td>PD, shared gains (protocol v2 tuning)</td><td class="num">0.02481</td><td class="num">[0.02108, 0.02925]</td><td class="num">8</td><td class="num">reference</td><td class="num">—</td><td class="num">—</td></tr>
+<tr><td>PD, shared gains of protocol v1</td><td class="num">0.006383</td><td class="num">[0.004206, 0.009801]</td><td class="num">8</td><td class="num">-0.01843</td><td class="num">[-0.0207, -0.01618]</td><td class="num">8</td></tr>
+</tbody>
+</table>
+</div>
+<figcaption>Speed x1.5: per-case values; dots are cases, the tick the mean, the bar its 95% bootstrap interval. <a class="source" href="data/compare_speed_x1.5.json">Data (JSON)</a></figcaption>
+</figure>
+
+<h2>Speed x2</h2>
+<table class="wide">
+<caption>Speed x2: primary metrics (mean over cases; paired difference against PD with shared gains, starred when the 95% bootstrap interval excludes zero).</caption>
+<thead>
+<tr><th>Regime</th><th>Metric</th><th class="num">PD, shared gains (protocol v2 tuning)</th><th class="num">PD, shared gains of protocol v1</th></tr>
+</thead>
+<tbody>
+<tr><td>Free joint-space motion</td><td>Position RMSE (rad)</td><td class="num">0.0326</td><td class="num">0.0102 (-0.022*)</td></tr>
+<tr><td>Free joint-space motion</td><td>Torque rate RMS (Nm/s)</td><td class="num">92.6</td><td class="num">216 (1.2e+02*)</td></tr>
+<tr><td>Policy-like targets</td><td>Position RMSE (rad)</td><td class="num">0.0975</td><td class="num">0.0541 (-0.043*)</td></tr>
+<tr><td>Policy-like targets</td><td>Torque rate RMS (Nm/s)</td><td class="num">1.99e+03</td><td class="num">5.85e+03 (3.9e+03*)</td></tr>
+<tr><td>Contact (tilt, depth, slide)</td><td>Excess contact force above 30 N (mean while in contact) (N)</td><td class="num">9.4</td><td class="num">31.8 (22*)</td></tr>
+<tr><td>Contact (tilt, depth, slide)</td><td>Excess contact force above the 15 N cap (mean while in contact) (N)</td><td class="num">16.3</td><td class="num">44.9 (29*)</td></tr>
+<tr><td>Contact (tilt, depth, slide)</td><td>Peak normal force (N)</td><td class="num">356</td><td class="num">500 (1.4e+02*)</td></tr>
+<tr><td>Contact (tilt, depth, slide)</td><td>Peak of the 20 ms low-pass filtered normal force (sustained force) (N)</td><td class="num">161</td><td class="num">227 (65*)</td></tr>
+<tr><td>Contact (tilt, depth, slide)</td><td>Feasible-direction tool error (m)</td><td class="num">0.0245</td><td class="num">0.0133 (-0.011*)</td></tr>
+<tr><td>Contact (tilt, depth, slide)</td><td>Press-phase force deficit below 5 N (N)</td><td class="num">0.511</td><td class="num">0 (-0.51)</td></tr>
+<tr><td>Contact (tilt, depth, slide)</td><td>Contact losses of 5 ms or more during contact phase (-)</td><td class="num">24.8</td><td class="num">7.25 (-18*)</td></tr>
+<tr><td>Contact (tilt, depth, slide)</td><td>Contact losses of 5 ms or more per second of press phase (1/s)</td><td class="num">16.6</td><td class="num">5.19 (-11*)</td></tr>
+<tr><td>Task sequence</td><td>Excess contact force above 30 N (mean while in contact) (N)</td><td class="num">7.35</td><td class="num">10.5 (3.2*)</td></tr>
+<tr><td>Task sequence</td><td>Excess contact force above the 15 N cap (mean while in contact) (N)</td><td class="num">13.8</td><td class="num">21.1 (7.2*)</td></tr>
+<tr><td>Task sequence</td><td>Peak normal force (N)</td><td class="num">360</td><td class="num">146 (-2.1e+02*)</td></tr>
+<tr><td>Task sequence</td><td>Peak of the 20 ms low-pass filtered normal force (sustained force) (N)</td><td class="num">138</td><td class="num">91.6 (-46)</td></tr>
+<tr><td>Task sequence</td><td>Feasible-direction tool error (m)</td><td class="num">0.0246</td><td class="num">0.00724 (-0.017*)</td></tr>
+<tr><td>Task sequence</td><td>Press-phase force deficit below 5 N (N)</td><td class="num">0.451</td><td class="num">0 (-0.45*)</td></tr>
+<tr><td>Task sequence</td><td>Contact losses of 5 ms or more per second of press phase (1/s)</td><td class="num">14.9</td><td class="num">4.97 (-9.9*)</td></tr>
+</tbody>
+</table><figure class="widget compare" id="fig-compare-speed_x2" data-widget="compare" data-src="data/compare_speed_x2.json" data-regime="free" data-metric="pos_rmse">
+<div class="widget-body">
+<p class="selection">Selection: Free joint-space motion, Position RMSE (rad); n = 8 cases. Mean with 95% bootstrap CI (1000 resamples); difference vs PD, shared gains (protocol v2 tuning) is paired by case, failed cases dropped from the pair.</p>
+<table class="compare-table">
+<thead>
+<tr><th>Method</th><th class="num">Mean</th><th class="num">95% CI</th><th class="num">n</th><th class="num">Δ vs reference</th><th class="num">95% CI (paired)</th><th class="num">Pairs</th></tr>
+</thead>
+<tbody>
+<tr><td>PD, shared gains (protocol v2 tuning)</td><td class="num">0.0326</td><td class="num">[0.02853, 0.03798]</td><td class="num">8</td><td class="num">reference</td><td class="num">—</td><td class="num">—</td></tr>
+<tr><td>PD, shared gains of protocol v1</td><td class="num">0.01015</td><td class="num">[0.006387, 0.01612]</td><td class="num">8</td><td class="num">-0.02245</td><td class="num">[-0.02479, -0.02012]</td><td class="num">8</td></tr>
+</tbody>
+</table>
+</div>
+<figcaption>Speed x2: per-case values; dots are cases, the tick the mean, the bar its 95% bootstrap interval. <a class="source" href="data/compare_speed_x2.json">Data (JSON)</a></figcaption>
+</figure>
+
+<h2>Payload 3 kg</h2>
+<table class="wide">
+<caption>Payload 3 kg: primary metrics (mean over cases; paired difference against PD with shared gains, starred when the 95% bootstrap interval excludes zero).</caption>
+<thead>
+<tr><th>Regime</th><th>Metric</th><th class="num">PD, shared gains (protocol v2 tuning)</th><th class="num">PD, shared gains of protocol v1</th></tr>
+</thead>
+<tbody>
+<tr><td>Free joint-space motion</td><td>Position RMSE (rad)</td><td class="num">0.0486</td><td class="num">0.00822 (-0.04*)</td></tr>
+<tr><td>Free joint-space motion</td><td>Torque rate RMS (Nm/s)</td><td class="num">58</td><td class="num">172 (1.1e+02*)</td></tr>
+<tr><td>Contact (tilt, depth, slide)</td><td>Excess contact force above 30 N (mean while in contact) (N)</td><td class="num">11.6</td><td class="num">44.4 (33*)</td></tr>
+<tr><td>Contact (tilt, depth, slide)</td><td>Excess contact force above the 15 N cap (mean while in contact) (N)</td><td class="num">22</td><td class="num">59.1 (37*)</td></tr>
+<tr><td>Contact (tilt, depth, slide)</td><td>Peak normal force (N)</td><td class="num">292</td><td class="num">286 (-6)</td></tr>
+<tr><td>Contact (tilt, depth, slide)</td><td>Peak of the 20 ms low-pass filtered normal force (sustained force) (N)</td><td class="num">136</td><td class="num">174 (38)</td></tr>
+<tr><td>Contact (tilt, depth, slide)</td><td>Feasible-direction tool error (m)</td><td class="num">0.0502</td><td class="num">0.0179 (-0.032*)</td></tr>
+<tr><td>Contact (tilt, depth, slide)</td><td>Press-phase force deficit below 5 N (N)</td><td class="num">1.16</td><td class="num">0 (-1.2)</td></tr>
+<tr><td>Contact (tilt, depth, slide)</td><td>Contact losses of 5 ms or more during contact phase (-)</td><td class="num">3.75</td><td class="num">0 (-3.8*)</td></tr>
+<tr><td>Contact (tilt, depth, slide)</td><td>Contact losses of 5 ms or more per second of press phase (1/s)</td><td class="num">2.17</td><td class="num">0 (-2.2*)</td></tr>
+<tr><td>Blocked reference</td><td>Excess contact force above 30 N (mean while in contact) (N)</td><td class="num">46.3</td><td class="num">179 (1.3e+02*)</td></tr>
+<tr><td>Blocked reference</td><td>Excess contact force above the 15 N cap (mean while in contact) (N)</td><td class="num">57.2</td><td class="num">193 (1.4e+02*)</td></tr>
+<tr><td>Blocked reference</td><td>Peak normal force (N)</td><td class="num">117</td><td class="num">267 (1.5e+02*)</td></tr>
+<tr><td>Blocked reference</td><td>Peak of the 20 ms low-pass filtered normal force (sustained force) (N)</td><td class="num">82.8</td><td class="num">258 (1.7e+02*)</td></tr>
+<tr><td>Blocked reference</td><td>Feasible-direction tool error (m)</td><td class="num">0.0847</td><td class="num">0.018 (-0.067*)</td></tr>
+<tr><td>Blocked reference</td><td>Recovery after a blocked reference returns (s)</td><td class="num">1.57</td><td class="num">0.421 (-1.2*)</td></tr>
+<tr><td>Blocked reference</td><td>Apparent stiffness: mean normal force per metre of reference depth while blocked (after the first 0.3 s of contact) (N/m)</td><td class="num">1.47e+03</td><td class="num">4.62e+03 (3.1e+03*)</td></tr>
+<tr><td>Task sequence</td><td>Excess contact force above 30 N (mean while in contact) (N)</td><td class="num">18.2</td><td class="num">27.1 (8.8*)</td></tr>
+<tr><td>Task sequence</td><td>Excess contact force above the 15 N cap (mean while in contact) (N)</td><td class="num">29.8</td><td class="num">41.6 (12*)</td></tr>
+<tr><td>Task sequence</td><td>Peak normal force (N)</td><td class="num">297</td><td class="num">88.3 (-2.1e+02*)</td></tr>
+<tr><td>Task sequence</td><td>Peak of the 20 ms low-pass filtered normal force (sustained force) (N)</td><td class="num">140</td><td class="num">86.3 (-54*)</td></tr>
+<tr><td>Task sequence</td><td>Feasible-direction tool error (m)</td><td class="num">0.0636</td><td class="num">0.0113 (-0.052*)</td></tr>
+<tr><td>Task sequence</td><td>Press-phase force deficit below 5 N (N)</td><td class="num">0</td><td class="num">0 (0)</td></tr>
+<tr><td>Task sequence</td><td>Contact losses of 5 ms or more per second of press phase (1/s)</td><td class="num">0</td><td class="num">0 (0)</td></tr>
+</tbody>
+</table><figure class="widget compare" id="fig-compare-payload_3kg" data-widget="compare" data-src="data/compare_payload_3kg.json" data-regime="free" data-metric="pos_rmse">
+<div class="widget-body">
+<p class="selection">Selection: Free joint-space motion, Position RMSE (rad); n = 8 cases. Mean with 95% bootstrap CI (1000 resamples); difference vs PD, shared gains (protocol v2 tuning) is paired by case, failed cases dropped from the pair.</p>
+<table class="compare-table">
+<thead>
+<tr><th>Method</th><th class="num">Mean</th><th class="num">95% CI</th><th class="num">n</th><th class="num">Δ vs reference</th><th class="num">95% CI (paired)</th><th class="num">Pairs</th></tr>
+</thead>
+<tbody>
+<tr><td>PD, shared gains (protocol v2 tuning)</td><td class="num">0.04858</td><td class="num">[0.04098, 0.05672]</td><td class="num">8</td><td class="num">reference</td><td class="num">—</td><td class="num">—</td></tr>
+<tr><td>PD, shared gains of protocol v1</td><td class="num">0.008222</td><td class="num">[0.006531, 0.009943]</td><td class="num">8</td><td class="num">-0.04036</td><td class="num">[-0.04696, -0.03353]</td><td class="num">8</td></tr>
+</tbody>
+</table>
+</div>
+<figcaption>Payload 3 kg: per-case values; dots are cases, the tick the mean, the bar its 95% bootstrap interval. <a class="source" href="data/compare_payload_3kg.json">Data (JSON)</a></figcaption>
+</figure>
+
+<h2>Held-out robot instances (doubled deviations)</h2>
+<table class="wide">
+<caption>Held-out robot instances (doubled deviations): primary metrics (mean over cases; paired difference against PD with shared gains, starred when the 95% bootstrap interval excludes zero).</caption>
+<thead>
+<tr><th>Regime</th><th>Metric</th><th class="num">PD, shared gains (protocol v2 tuning)</th><th class="num">PD, shared gains of protocol v1</th></tr>
+</thead>
+<tbody>
+<tr><td>Free joint-space motion</td><td>Position RMSE (rad)</td><td class="num">0.0184</td><td class="num">0.00375 (-0.015*)</td></tr>
+<tr><td>Free joint-space motion</td><td>Torque rate RMS (Nm/s)</td><td class="num">51.5</td><td class="num">172 (1.2e+02*)</td></tr>
+<tr><td>Policy-like targets</td><td>Position RMSE (rad)</td><td class="num">0.0612</td><td class="num">0.0351 (-0.026*)</td></tr>
+<tr><td>Policy-like targets</td><td>Torque rate RMS (Nm/s)</td><td class="num">1.89e+03</td><td class="num">5.24e+03 (3.4e+03*)</td></tr>
+<tr><td>Contact (tilt, depth, slide)</td><td>Excess contact force above 30 N (mean while in contact) (N)</td><td class="num">8.01</td><td class="num">54.7 (47*)</td></tr>
+<tr><td>Contact (tilt, depth, slide)</td><td>Excess contact force above the 15 N cap (mean while in contact) (N)</td><td class="num">15.6</td><td class="num">67.9 (52*)</td></tr>
+<tr><td>Contact (tilt, depth, slide)</td><td>Peak normal force (N)</td><td class="num">217</td><td class="num">259 (41)</td></tr>
+<tr><td>Contact (tilt, depth, slide)</td><td>Peak of the 20 ms low-pass filtered normal force (sustained force) (N)</td><td class="num">113</td><td class="num">170 (57*)</td></tr>
+<tr><td>Contact (tilt, depth, slide)</td><td>Feasible-direction tool error (m)</td><td class="num">0.022</td><td class="num">0.0156 (-0.0065)</td></tr>
+<tr><td>Contact (tilt, depth, slide)</td><td>Press-phase force deficit below 5 N (N)</td><td class="num">0.784</td><td class="num">0 (-0.78)</td></tr>
+<tr><td>Contact (tilt, depth, slide)</td><td>Contact losses of 5 ms or more during contact phase (-)</td><td class="num">21.6</td><td class="num">0 (-22*)</td></tr>
+<tr><td>Contact (tilt, depth, slide)</td><td>Contact losses of 5 ms or more per second of press phase (1/s)</td><td class="num">10.4</td><td class="num">0 (-10*)</td></tr>
+<tr><td>Blocked reference</td><td>Excess contact force above 30 N (mean while in contact) (N)</td><td class="num">19.1</td><td class="num">148 (1.3e+02*)</td></tr>
+<tr><td>Blocked reference</td><td>Excess contact force above the 15 N cap (mean while in contact) (N)</td><td class="num">31.2</td><td class="num">163 (1.3e+02*)</td></tr>
+<tr><td>Blocked reference</td><td>Peak normal force (N)</td><td class="num">112</td><td class="num">233 (1.2e+02*)</td></tr>
+<tr><td>Blocked reference</td><td>Peak of the 20 ms low-pass filtered normal force (sustained force) (N)</td><td class="num">73.6</td><td class="num">224 (1.5e+02*)</td></tr>
+<tr><td>Blocked reference</td><td>Feasible-direction tool error (m)</td><td class="num">0.0431</td><td class="num">0.0173 (-0.026*)</td></tr>
+<tr><td>Blocked reference</td><td>Recovery after a blocked reference returns (s)</td><td class="num">0.823</td><td class="num">0.133 (-0.69*)</td></tr>
+<tr><td>Blocked reference</td><td>Apparent stiffness: mean normal force per metre of reference depth while blocked (after the first 0.3 s of contact) (N/m)</td><td class="num">884</td><td class="num">4.03e+03 (3.1e+03*)</td></tr>
+</tbody>
+</table><figure class="widget compare" id="fig-compare-ood_instances" data-widget="compare" data-src="data/compare_ood_instances.json" data-regime="free" data-metric="pos_rmse">
+<div class="widget-body">
+<p class="selection">Selection: Free joint-space motion, Position RMSE (rad); n = 8 cases. Mean with 95% bootstrap CI (1000 resamples); difference vs PD, shared gains (protocol v2 tuning) is paired by case, failed cases dropped from the pair.</p>
+<table class="compare-table">
+<thead>
+<tr><th>Method</th><th class="num">Mean</th><th class="num">95% CI</th><th class="num">n</th><th class="num">Δ vs reference</th><th class="num">95% CI (paired)</th><th class="num">Pairs</th></tr>
+</thead>
+<tbody>
+<tr><td>PD, shared gains (protocol v2 tuning)</td><td class="num">0.01836</td><td class="num">[0.01463, 0.02257]</td><td class="num">8</td><td class="num">reference</td><td class="num">—</td><td class="num">—</td></tr>
+<tr><td>PD, shared gains of protocol v1</td><td class="num">0.003749</td><td class="num">[0.002976, 0.004592]</td><td class="num">8</td><td class="num">-0.01461</td><td class="num">[-0.01781, -0.0113]</td><td class="num">8</td></tr>
+</tbody>
+</table>
+</div>
+<figcaption>Held-out robot instances (doubled deviations): per-case values; dots are cases, the tick the mean, the bar its 95% bootstrap interval. <a class="source" href="data/compare_ood_instances.json">Data (JSON)</a></figcaption>
+</figure>
+
+<h2>Findings</h2>
+<ol>
+<li><strong>A fixed PD cannot be accurate and compliant at once, and on the instance distribution neither set is compliant.</strong> On blocked references the v1 gains push with 110 N of mean excess force above 30 N (peak 205 N) because the target lies 4 to 8 cm inside the surface and a stiff loop converts the error into force; the v2 gains reduce the excess to 22.5 N (peak 117 N) and the onset impulse in the contact family from 8.7 to 6.2 N s, at the price of tracking: hold error 16.7 against 2.8 mrad, pulse deflection 16 against 4.5 mm, free-motion error 19 against 3.5 mrad. The 22.5 N is five times the figure of the nominal robot (4.9 N): the payload sag and the instance deviations put the blocked target deeper into the surface before the loop sees it.</li>
+<li><strong>The soft set's tracking loss comes from the payload, not from the gains alone.</strong> Both sets compensate gravity with the nominal model and have no integral action, so a payload sags the arm by its torque divided by the stiffness: the v2 set's hold error grows from 2.5 mrad on the nominal robot to 16.7 mrad on the instances (payloads of 0 to 2 kg) and its free-motion error at 3 kg is 49 mrad (v1: 8 mrad). Payload identification is therefore the first thing a learned controller with a proprioceptive history can add.</li>
+<li><strong>Policy-like targets favour the soft set outright.</strong> At 10 to 50 Hz held targets with jitter the v2 PD has a torque-rate RMS of 1766 against 4893 Nm/s, with a position RMSE of 55 against 33 mrad; the stiff loop converts target jitter into torque chatter.</li>
+<li><strong>Held-out conditions do not change the picture.</strong> In the held-out workspace both sets perform as in distribution (no contact). At twice the reference speed the soft set's free-motion error rises to 33 mrad and the stiff set's impact peaks to 407 N (soft set 291 N). With a 3 kg payload the soft set's blocked excess force rises to 39 N and its task-family peak to 297 N (stiff set 128 N and 88 N, since it does not sag into the surface); with doubled instance deviations the two sets keep their in-distribution values (21 and 105 N blocked excess).</li>
+<li><strong>The compliance metrics are well-posed on these controllers.</strong> Excess force cannot be reduced by stopping, because feasible-direction tracking and the press deficit rise instead: the soft PD, which presses weakly, is charged 0.24 N of press deficit and 24 mm of feasible-direction error in the task family. No composite term rewards a controller for not moving.</li>
+<li><strong>Unintended contacts exist in the contact families</strong> (links or flange touching the table in a minority of the samples of contact2 and blocked cases, for both gain sets), a property of tilted and deep commands rather than of the controllers; they are counted and not removed.</li>
+</ol>
+
+<h2>Caveats and failures</h2>
+<ul>
+<li>The tuning objective's weights decide where on the accuracy-compliance axis the optimum lands; the per-metric values above are the evidence, the composite only the device that found this gain set.</li>
+<li>Both gain sets were tuned on the nominal robot (erratum): the tuning harness ignored the instances and payloads. A set tuned on the instance distribution would likely be stiffer; whether to re-tune is a decision for the advisor, because the v2 set is the base of every residual controller of the deep dive.</li>
+<li>The composite used during tuning lacked the peak-force term because of a metric defect fixed after tuning; the excess-force term was active, so the tuned set is compliance-aware, and the evaluation reported here uses the corrected metrics.</li>
+<li>Instances carry 0.1 mrad noise and payload gravity errors that neither gain set compensates (nominal model), which is intended.</li>
+<li>Four tune cases per family; the v1 gains were tuned on six cases of the v1 families, so the two sets had different tuning data by design.</li>
+</ul>
+
+<h2>Next steps</h2>
+<p>Report D2 trains PD + residual and neural torque at 1 kHz through the simulator's own gradients on this distribution, with and without the contact-force terms, and evaluates them on exactly these groups against both gain sets.</p>

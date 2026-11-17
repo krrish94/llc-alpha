@@ -1,0 +1,73 @@
+{
+  "path": "research/reports/16-checkpoint-2/media/policy_100x.mp4",
+  "record": "research/reports/16-checkpoint-2/media/policy_100x.json",
+  "frames": 241,
+  "fps": 50,
+  "speed": 1.0,
+  "duration_s": 4.82,
+  "width": 2016,
+  "height": 750,
+  "resolution": [
+    2016,
+    750
+  ],
+  "view_size": [
+    480,
+    360
+  ],
+  "camera": "side",
+  "title": "Policy-like targets, case policy-test-006",
+  "plot_series": [
+    "pos_err",
+    "f_normal",
+    "tau2"
+  ],
+  "t_start": 0.0,
+  "t_end": 4.8,
+  "sample_step": 20,
+  "sample_rate_hz": 1000.0,
+  "posters": {
+    "first": "research/reports/16-checkpoint-2/media/policy_100x-first.png",
+    "middle": "research/reports/16-checkpoint-2/media/policy_100x-middle.png",
+    "last": "research/reports/16-checkpoint-2/media/policy_100x-last.png"
+  },
+  "episodes": [
+    {
+      "method": "pd_shared",
+      "label": "PD, tracking-tuned",
+      "npz": "runs/m10r2/episodes_test/policy-test-006__pd_shared.npz",
+      "sha256": "3b9dc66b0d66bd8567e1e294c5a0a50df9bd6c35f756c8a7c00422e4ddfcdc45",
+      "joint_rmse_mrad": 38.20058864709206,
+      "peak_normal_force_n": 0.0
+    },
+    {
+      "method": "pd_feedforward",
+      "label": "PD + inverse-dynamics feedforward",
+      "npz": "runs/m10r2/episodes_test/policy-test-006__pd_feedforward.npz",
+      "sha256": "3b9dc66b0d66bd8567e1e294c5a0a50df9bd6c35f756c8a7c00422e4ddfcdc45",
+      "joint_rmse_mrad": 38.20058864709206,
+      "peak_normal_force_n": 0.0
+    },
+    {
+      "method": "oracle_pd",
+      "label": "Oracle around the PD (privileged)",
+      "npz": "runs/m10r2/episodes_test/policy-test-006__oracle_pd.npz",
+      "sha256": "3b9dc66b0d66bd8567e1e294c5a0a50df9bd6c35f756c8a7c00422e4ddfcdc45",
+      "joint_rmse_mrad": 38.20058864709206,
+      "peak_normal_force_n": 0.0
+    },
+    {
+      "method": "distill_two",
+      "label": "Learned controller (two-teacher student)",
+      "npz": "runs/m10r2/episodes_test/policy-test-006__distill_two-s0.npz",
+      "sha256": "bc14247ffcdb5193b11f335d311f913293ec85dd34fe61297d74d518f0cf8233",
+      "joint_rmse_mrad": 37.74407948503465,
+      "peak_normal_force_n": 0.0
+    }
+  ],
+  "reference": "gray sphere: commanded tool position, q_ref through llc.sim.nominal.NominalModel",
+  "trace": "measured tool path over the last 0.5 s, gray (old) to method color (new)",
+  "metrics": "joint RMSE over all joints and samples from t = 0 to the displayed time (mrad); peak normal force so far (N)",
+  "scene": "llc/sim/assets/panda_2f85_0800.xml",
+  "render_seconds": 5.73
+}

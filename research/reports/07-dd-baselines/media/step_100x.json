@@ -1,0 +1,57 @@
+{
+  "path": "research/reports/07-dd-baselines/media/step_100x.mp4",
+  "record": "research/reports/07-dd-baselines/media/step_100x.json",
+  "frames": 188,
+  "fps": 50,
+  "speed": 1.0,
+  "duration_s": 3.76,
+  "width": 1024,
+  "height": 750,
+  "resolution": [
+    1024,
+    750
+  ],
+  "view_size": [
+    480,
+    360
+  ],
+  "camera": "side",
+  "title": "Step targets, case step-test-011",
+  "plot_series": [
+    "pos_err",
+    "f_normal",
+    "tau2"
+  ],
+  "t_start": 0.0,
+  "t_end": 3.74,
+  "sample_step": 20,
+  "sample_rate_hz": 1000.0,
+  "posters": {
+    "first": "research/reports/07-dd-baselines/media/step_100x-first.png",
+    "middle": "research/reports/07-dd-baselines/media/step_100x-middle.png",
+    "last": "research/reports/07-dd-baselines/media/step_100x-last.png"
+  },
+  "episodes": [
+    {
+      "method": "pd_shared",
+      "label": "PD, shared gains (v2)",
+      "npz": "runs/d1/episodes/step-test-011__pd_shared.npz",
+      "sha256": "64795e49e3c3bee56729ae66f04bf03425b9f9ed131d5e41d697d3aa5e7ad08b",
+      "joint_rmse_mrad": 42.74568634456282,
+      "peak_normal_force_n": 0.0
+    },
+    {
+      "method": "pd_shared_v1",
+      "label": "PD, shared gains (v1)",
+      "npz": "runs/d1/episodes/step-test-011__pd_shared_v1.npz",
+      "sha256": "c4e4098a68417ed90dce9f8f5b2996d537f0b1501b7efc94fa1e2e979faecada",
+      "joint_rmse_mrad": 34.96016246100902,
+      "peak_normal_force_n": 0.0
+    }
+  ],
+  "reference": "gray sphere: commanded tool position, q_ref through llc.sim.nominal.NominalModel",
+  "trace": "measured tool path over the last 0.5 s, gray (old) to method color (new)",
+  "metrics": "joint RMSE over all joints and samples from t = 0 to the displayed time (mrad); peak normal force so far (N)",
+  "scene": "llc/sim/assets/panda_scene.xml",
+  "render_seconds": 1.95
+}

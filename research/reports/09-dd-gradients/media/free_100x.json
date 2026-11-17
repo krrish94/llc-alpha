@@ -1,0 +1,73 @@
+{
+  "path": "research/reports/09-dd-gradients/media/free_100x.mp4",
+  "record": "research/reports/09-dd-gradients/media/free_100x.json",
+  "frames": 259,
+  "fps": 50,
+  "speed": 1.0,
+  "duration_s": 5.18,
+  "width": 2016,
+  "height": 750,
+  "resolution": [
+    2016,
+    750
+  ],
+  "view_size": [
+    480,
+    360
+  ],
+  "camera": "side",
+  "title": "Free joint-space motion, case free-test-002",
+  "plot_series": [
+    "pos_err",
+    "f_normal",
+    "tau2"
+  ],
+  "t_start": 0.0,
+  "t_end": 5.16,
+  "sample_step": 20,
+  "sample_rate_hz": 1000.0,
+  "posters": {
+    "first": "research/reports/09-dd-gradients/media/free_100x-first.png",
+    "middle": "research/reports/09-dd-gradients/media/free_100x-middle.png",
+    "last": "research/reports/09-dd-gradients/media/free_100x-last.png"
+  },
+  "episodes": [
+    {
+      "method": "pd_shared",
+      "label": "PD, shared gains (v2)",
+      "npz": "runs/d4/episodes/free-test-002__pd_shared.npz",
+      "sha256": "d5a3c2ea442797ee2ceb110460c9c699b1128b9a5d49f9815fd0a96d3bc89692",
+      "joint_rmse_mrad": 17.97315790204864,
+      "peak_normal_force_n": 0.0
+    },
+    {
+      "method": "pd_shared_v1",
+      "label": "PD, shared gains (v1)",
+      "npz": "runs/d4/episodes/free-test-002__pd_shared_v1.npz",
+      "sha256": "99b6f926f0de9277d75b7937df8273a46de52de1bd696b278723a6c155e5b9c8",
+      "joint_rmse_mrad": 3.191580946897364,
+      "peak_normal_force_n": 0.0
+    },
+    {
+      "method": "pd_residual_acmed",
+      "label": "PD + residual, AC, first reward",
+      "npz": "runs/d4/episodes/free-test-002__pd_residual_acmed-s0.npz",
+      "sha256": "ffc1392b7ba171ca8aa7d1e3c1598399ce905a35978e478916b8ab6571b027c2",
+      "joint_rmse_mrad": 29.495550058193007,
+      "peak_normal_force_n": 0.0
+    },
+    {
+      "method": "pd_residual_acmed_s02_lowrate",
+      "label": "PD + residual, AC, rate-light, 20 mrad kernel",
+      "npz": "runs/d4/episodes/free-test-002__pd_residual_acmed_s02_lowrate-s0.npz",
+      "sha256": "a5f994a97d5f8442561843cad220b7292d1a3d73ad95905915dffaa343bea6b1",
+      "joint_rmse_mrad": 9.238875252249239,
+      "peak_normal_force_n": 0.0
+    }
+  ],
+  "reference": "gray sphere: commanded tool position, q_ref through llc.sim.nominal.NominalModel",
+  "trace": "measured tool path over the last 0.5 s, gray (old) to method color (new)",
+  "metrics": "joint RMSE over all joints and samples from t = 0 to the displayed time (mrad); peak normal force so far (N)",
+  "scene": "llc/sim/assets/panda_scene.xml",
+  "render_seconds": 5.36
+}

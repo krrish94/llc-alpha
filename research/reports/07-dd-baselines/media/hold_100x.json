@@ -1,0 +1,57 @@
+{
+  "path": "research/reports/07-dd-baselines/media/hold_100x.mp4",
+  "record": "research/reports/07-dd-baselines/media/hold_100x.json",
+  "frames": 150,
+  "fps": 50,
+  "speed": 1.0,
+  "duration_s": 3.0,
+  "width": 1024,
+  "height": 750,
+  "resolution": [
+    1024,
+    750
+  ],
+  "view_size": [
+    480,
+    360
+  ],
+  "camera": "side",
+  "title": "Hold, case hold-test-003",
+  "plot_series": [
+    "pos_err",
+    "f_normal",
+    "tau2"
+  ],
+  "t_start": 0.0,
+  "t_end": 2.98,
+  "sample_step": 20,
+  "sample_rate_hz": 1000.0,
+  "posters": {
+    "first": "research/reports/07-dd-baselines/media/hold_100x-first.png",
+    "middle": "research/reports/07-dd-baselines/media/hold_100x-middle.png",
+    "last": "research/reports/07-dd-baselines/media/hold_100x-last.png"
+  },
+  "episodes": [
+    {
+      "method": "pd_shared",
+      "label": "PD, shared gains (v2)",
+      "npz": "runs/d1/episodes/hold-test-003__pd_shared.npz",
+      "sha256": "8923de02ec133b03e5c1d42559de85ecc32c1f51d43822f9eb52cdbf04867b26",
+      "joint_rmse_mrad": 14.442626935314614,
+      "peak_normal_force_n": 0.0
+    },
+    {
+      "method": "pd_shared_v1",
+      "label": "PD, shared gains (v1)",
+      "npz": "runs/d1/episodes/hold-test-003__pd_shared_v1.npz",
+      "sha256": "41411824c66025804f42866c3e5fb40980514d2a031e1ad49c1741fbfa0d3c8f",
+      "joint_rmse_mrad": 2.709350668987843,
+      "peak_normal_force_n": 0.0
+    }
+  ],
+  "reference": "gray sphere: commanded tool position, q_ref through llc.sim.nominal.NominalModel",
+  "trace": "measured tool path over the last 0.5 s, gray (old) to method color (new)",
+  "metrics": "joint RMSE over all joints and samples from t = 0 to the displayed time (mrad); peak normal force so far (N)",
+  "scene": "llc/sim/assets/panda_scene.xml",
+  "render_seconds": 1.72
+}

@@ -1,0 +1,65 @@
+{
+  "path": "research/reports/12-checkpoint-1/media/policy_100x.mp4",
+  "record": "research/reports/12-checkpoint-1/media/policy_100x.json",
+  "frames": 259,
+  "fps": 50,
+  "speed": 1.0,
+  "duration_s": 5.18,
+  "width": 1520,
+  "height": 750,
+  "resolution": [
+    1520,
+    750
+  ],
+  "view_size": [
+    480,
+    360
+  ],
+  "camera": "side",
+  "title": "Policy-like targets, case policy-test-010",
+  "plot_series": [
+    "pos_err",
+    "f_normal",
+    "tau2"
+  ],
+  "t_start": 0.0,
+  "t_end": 5.16,
+  "sample_step": 20,
+  "sample_rate_hz": 1000.0,
+  "posters": {
+    "first": "research/reports/12-checkpoint-1/media/policy_100x-first.png",
+    "middle": "research/reports/12-checkpoint-1/media/policy_100x-middle.png",
+    "last": "research/reports/12-checkpoint-1/media/policy_100x-last.png"
+  },
+  "episodes": [
+    {
+      "method": "pd_shared",
+      "label": "PD, shared gains",
+      "npz": "runs/d5/episodes/policy-test-010__pd_shared.npz",
+      "sha256": "e119a3ac6b474cfafa72c44a9a3857edada6e9731c131f3c25f5d76012961938",
+      "joint_rmse_mrad": 74.46947296005945,
+      "peak_normal_force_n": 0.0
+    },
+    {
+      "method": "pd_residual_acmed_s02_lowrate",
+      "label": "PD + learned residual",
+      "npz": "runs/d5/episodes/policy-test-010__pd_residual_acmed_s02_lowrate-s0.npz",
+      "sha256": "c41a94519ca206100f5e5f0ad7dc4466ff30776348fe954dd43689cd951c5857",
+      "joint_rmse_mrad": 46.46205433442807,
+      "peak_normal_force_n": 0.0
+    },
+    {
+      "method": "ppo_contact_v2",
+      "label": "PPO, contact families",
+      "npz": "runs/d5/episodes/policy-test-010__ppo_contact_v2-s0.npz",
+      "sha256": "141b6b2d73f65ee142da2367144067aa0e4d02c25c042b52abb151a81f896ba5",
+      "joint_rmse_mrad": 56.27291482816403,
+      "peak_normal_force_n": 0.0
+    }
+  ],
+  "reference": "gray sphere: commanded tool position, q_ref through llc.sim.nominal.NominalModel",
+  "trace": "measured tool path over the last 0.5 s, gray (old) to method color (new)",
+  "metrics": "joint RMSE over all joints and samples from t = 0 to the displayed time (mrad); peak normal force so far (N)",
+  "scene": "llc/sim/assets/panda_scene.xml",
+  "render_seconds": 4.46
+}

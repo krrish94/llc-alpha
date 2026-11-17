@@ -1,0 +1,108 @@
+<h2>Question</h2>
+<p>Where do the controllers of Milestone 2, trained on the nominal model, degrade when the plant's dynamics change, and does randomizing the model's dynamics during training (DR) recover performance, including at levels and combinations outside the randomization range? The factors are payload mass and centre of mass, link inertia, joint dry friction, actuation delay, observation noise and reference speed (<a href="../adr/index.html">ADR 0004</a>).</p>
+
+<h2>Setup</h2>
+<p>Every factor is swept one at a time on the test split (6 cases per regime and level, all six regimes), plus 12 random combinations of all factors. The plant is perturbed; the conventional baseline keeps its nominal gravity model, as on a real robot with an unknown payload. DR variants are trained with the same protocol as Milestone 2 but with the model's payload, inertia, friction, damping, latency and observation noise sampled every iteration from the training ranges of ADR 0004, which lie strictly inside the swept levels. One seed per variant.</p>
+
+<h2>Robustness curves</h2>
+<p>Composite and position RMSE against each factor level, averaged over regimes and cases. The grey band marks the DR training range; levels outside it are held out.</p><figure id="fig-robust-composite" class="wide">
+<img src="figures/robustness_composite.svg" alt="composite against each perturbation factor (mean over cases of all regimes with 95% bootstrap interval; log scale). The grey band is the randomization range used for DR training; levels outside it are held out.">
+<figcaption>composite against each perturbation factor (mean over cases of all regimes with 95% bootstrap interval; log scale). The grey band is the randomization range used for DR training; levels outside it are held out.</figcaption>
+</figure><figure id="fig-robust-pos_rmse" class="wide">
+<img src="figures/robustness_pos_rmse.svg" alt="position RMSE (rad) against each perturbation factor (mean over cases of all regimes with 95% bootstrap interval; log scale). The grey band is the randomization range used for DR training; levels outside it are held out.">
+<figcaption>position RMSE (rad) against each perturbation factor (mean over cases of all regimes with 95% bootstrap interval; log scale). The grey band is the randomization range used for DR training; levels outside it are held out.</figcaption>
+</figure>
+
+<h2>Degradation at held-out levels</h2>
+<table class="wide">
+<caption>Degradation from the nominal level to the most extreme (held-out) level of each factor; composite averaged over all regimes and cases.</caption>
+<thead>
+<tr><th>Factor</th><th>Controller</th><th class="num">Composite at nominal</th><th class="num">Extreme level</th><th class="num">Composite at extreme</th><th class="num">Ratio</th><th class="num">Diverged cases (all levels)</th></tr>
+</thead>
+<tbody>
+<tr><td>Payload mass (kg)</td><td>PD, shared gains</td><td class="num">1.41</td><td class="num">3.0</td><td class="num">2.31</td><td class="num">1.64x</td><td class="num">0</td></tr>
+<tr><td>Payload mass (kg)</td><td>Learned gains (nominal)</td><td class="num">1.62</td><td class="num">3.0</td><td class="num">2.95</td><td class="num">1.82x</td><td class="num">0</td></tr>
+<tr><td>Payload mass (kg)</td><td>PD + residual (nominal)</td><td class="num">1.4</td><td class="num">3.0</td><td class="num">2.24</td><td class="num">1.60x</td><td class="num">0</td></tr>
+<tr><td>Payload mass (kg)</td><td>Neural torque (nominal)</td><td class="num">1.89</td><td class="num">3.0</td><td class="num">2.86</td><td class="num">1.52x</td><td class="num">0</td></tr>
+<tr><td>Payload mass (kg)</td><td>Learned gains (DR)</td><td class="num">1.56</td><td class="num">3.0</td><td class="num">2.61</td><td class="num">1.68x</td><td class="num">0</td></tr>
+<tr><td>Payload mass (kg)</td><td>PD + residual (DR)</td><td class="num">1.41</td><td class="num">3.0</td><td class="num">2.21</td><td class="num">1.57x</td><td class="num">0</td></tr>
+<tr><td>Payload mass (kg)</td><td>Neural torque (DR)</td><td class="num">1.74</td><td class="num">3.0</td><td class="num">2.93</td><td class="num">1.69x</td><td class="num">0</td></tr>
+<tr><td>Payload lateral offset (m, with 1 kg)</td><td>PD, shared gains</td><td class="num">1.54</td><td class="num">0.1</td><td class="num">1.6</td><td class="num">1.04x</td><td class="num">0</td></tr>
+<tr><td>Payload lateral offset (m, with 1 kg)</td><td>Learned gains (nominal)</td><td class="num">1.74</td><td class="num">0.1</td><td class="num">1.84</td><td class="num">1.06x</td><td class="num">0</td></tr>
+<tr><td>Payload lateral offset (m, with 1 kg)</td><td>PD + residual (nominal)</td><td class="num">1.54</td><td class="num">0.1</td><td class="num">1.6</td><td class="num">1.04x</td><td class="num">0</td></tr>
+<tr><td>Payload lateral offset (m, with 1 kg)</td><td>Neural torque (nominal)</td><td class="num">1.98</td><td class="num">0.1</td><td class="num">2.31</td><td class="num">1.17x</td><td class="num">0</td></tr>
+<tr><td>Payload lateral offset (m, with 1 kg)</td><td>Learned gains (DR)</td><td class="num">1.73</td><td class="num">0.1</td><td class="num">1.81</td><td class="num">1.05x</td><td class="num">0</td></tr>
+<tr><td>Payload lateral offset (m, with 1 kg)</td><td>PD + residual (DR)</td><td class="num">1.53</td><td class="num">0.1</td><td class="num">1.6</td><td class="num">1.04x</td><td class="num">0</td></tr>
+<tr><td>Payload lateral offset (m, with 1 kg)</td><td>Neural torque (DR)</td><td class="num">1.88</td><td class="num">0.1</td><td class="num">1.98</td><td class="num">1.05x</td><td class="num">0</td></tr>
+<tr><td>Link inertia scale</td><td>PD, shared gains</td><td class="num">1.41</td><td class="num">1.6</td><td class="num">1.46</td><td class="num">1.03x</td><td class="num">0</td></tr>
+<tr><td>Link inertia scale</td><td>Learned gains (nominal)</td><td class="num">1.62</td><td class="num">1.6</td><td class="num">1.67</td><td class="num">1.04x</td><td class="num">0</td></tr>
+<tr><td>Link inertia scale</td><td>PD + residual (nominal)</td><td class="num">1.4</td><td class="num">1.6</td><td class="num">1.43</td><td class="num">1.02x</td><td class="num">0</td></tr>
+<tr><td>Link inertia scale</td><td>Neural torque (nominal)</td><td class="num">1.89</td><td class="num">1.6</td><td class="num">1.93</td><td class="num">1.02x</td><td class="num">0</td></tr>
+<tr><td>Link inertia scale</td><td>Learned gains (DR)</td><td class="num">1.56</td><td class="num">1.6</td><td class="num">1.62</td><td class="num">1.04x</td><td class="num">0</td></tr>
+<tr><td>Link inertia scale</td><td>PD + residual (DR)</td><td class="num">1.41</td><td class="num">1.6</td><td class="num">1.44</td><td class="num">1.03x</td><td class="num">0</td></tr>
+<tr><td>Link inertia scale</td><td>Neural torque (DR)</td><td class="num">1.74</td><td class="num">1.6</td><td class="num">1.79</td><td class="num">1.03x</td><td class="num">0</td></tr>
+<tr><td>Joint dry friction (Nm)</td><td>PD, shared gains</td><td class="num">1.41</td><td class="num">2.0</td><td class="num">1.48</td><td class="num">1.05x</td><td class="num">0</td></tr>
+<tr><td>Joint dry friction (Nm)</td><td>Learned gains (nominal)</td><td class="num">1.62</td><td class="num">2.0</td><td class="num">1.64</td><td class="num">1.02x</td><td class="num">0</td></tr>
+<tr><td>Joint dry friction (Nm)</td><td>PD + residual (nominal)</td><td class="num">1.4</td><td class="num">2.0</td><td class="num">1.47</td><td class="num">1.05x</td><td class="num">0</td></tr>
+<tr><td>Joint dry friction (Nm)</td><td>Neural torque (nominal)</td><td class="num">1.89</td><td class="num">2.0</td><td class="num">3.11</td><td class="num">1.65x</td><td class="num">0</td></tr>
+<tr><td>Joint dry friction (Nm)</td><td>Learned gains (DR)</td><td class="num">1.56</td><td class="num">2.0</td><td class="num">1.58</td><td class="num">1.01x</td><td class="num">0</td></tr>
+<tr><td>Joint dry friction (Nm)</td><td>PD + residual (DR)</td><td class="num">1.41</td><td class="num">2.0</td><td class="num">1.48</td><td class="num">1.05x</td><td class="num">0</td></tr>
+<tr><td>Joint dry friction (Nm)</td><td>Neural torque (DR)</td><td class="num">1.74</td><td class="num">2.0</td><td class="num">2.7</td><td class="num">1.55x</td><td class="num">0</td></tr>
+<tr><td>Actuation delay (s)</td><td>PD, shared gains</td><td class="num">1.41</td><td class="num">0.02</td><td class="num">14.3</td><td class="num">10.14x</td><td class="num">0</td></tr>
+<tr><td>Actuation delay (s)</td><td>Learned gains (nominal)</td><td class="num">1.62</td><td class="num">0.02</td><td class="num">12.9</td><td class="num">7.97x</td><td class="num">0</td></tr>
+<tr><td>Actuation delay (s)</td><td>PD + residual (nominal)</td><td class="num">1.4</td><td class="num">0.02</td><td class="num">14.3</td><td class="num">10.24x</td><td class="num">0</td></tr>
+<tr><td>Actuation delay (s)</td><td>Neural torque (nominal)</td><td class="num">1.89</td><td class="num">0.02</td><td class="num">14.1</td><td class="num">7.48x</td><td class="num">0</td></tr>
+<tr><td>Actuation delay (s)</td><td>Learned gains (DR)</td><td class="num">1.56</td><td class="num">0.02</td><td class="num">18.4</td><td class="num">11.84x</td><td class="num">0</td></tr>
+<tr><td>Actuation delay (s)</td><td>PD + residual (DR)</td><td class="num">1.41</td><td class="num">0.02</td><td class="num">14.8</td><td class="num">10.50x</td><td class="num">0</td></tr>
+<tr><td>Actuation delay (s)</td><td>Neural torque (DR)</td><td class="num">1.74</td><td class="num">0.02</td><td class="num">20.5</td><td class="num">11.76x</td><td class="num">0</td></tr>
+<tr><td>Position noise std (rad)</td><td>PD, shared gains</td><td class="num">1.41</td><td class="num">0.01</td><td class="num">12.1</td><td class="num">8.55x</td><td class="num">0</td></tr>
+<tr><td>Position noise std (rad)</td><td>Learned gains (nominal)</td><td class="num">1.62</td><td class="num">0.01</td><td class="num">6.94</td><td class="num">4.29x</td><td class="num">0</td></tr>
+<tr><td>Position noise std (rad)</td><td>PD + residual (nominal)</td><td class="num">1.4</td><td class="num">0.01</td><td class="num">12</td><td class="num">8.62x</td><td class="num">0</td></tr>
+<tr><td>Position noise std (rad)</td><td>Neural torque (nominal)</td><td class="num">1.89</td><td class="num">0.01</td><td class="num">3.96</td><td class="num">2.10x</td><td class="num">0</td></tr>
+<tr><td>Position noise std (rad)</td><td>Learned gains (DR)</td><td class="num">1.56</td><td class="num">0.01</td><td class="num">7.78</td><td class="num">5.00x</td><td class="num">0</td></tr>
+<tr><td>Position noise std (rad)</td><td>PD + residual (DR)</td><td class="num">1.41</td><td class="num">0.01</td><td class="num">12.1</td><td class="num">8.58x</td><td class="num">0</td></tr>
+<tr><td>Position noise std (rad)</td><td>Neural torque (DR)</td><td class="num">1.74</td><td class="num">0.01</td><td class="num">3.83</td><td class="num">2.20x</td><td class="num">0</td></tr>
+<tr><td>Reference speed scale</td><td>PD, shared gains</td><td class="num">1.41</td><td class="num">2.0</td><td class="num">2.57</td><td class="num">1.82x</td><td class="num">0</td></tr>
+<tr><td>Reference speed scale</td><td>Learned gains (nominal)</td><td class="num">1.62</td><td class="num">2.0</td><td class="num">2.88</td><td class="num">1.78x</td><td class="num">0</td></tr>
+<tr><td>Reference speed scale</td><td>PD + residual (nominal)</td><td class="num">1.4</td><td class="num">2.0</td><td class="num">2.64</td><td class="num">1.89x</td><td class="num">0</td></tr>
+<tr><td>Reference speed scale</td><td>Neural torque (nominal)</td><td class="num">1.89</td><td class="num">2.0</td><td class="num">3.05</td><td class="num">1.62x</td><td class="num">0</td></tr>
+<tr><td>Reference speed scale</td><td>Learned gains (DR)</td><td class="num">1.56</td><td class="num">2.0</td><td class="num">2.83</td><td class="num">1.82x</td><td class="num">0</td></tr>
+<tr><td>Reference speed scale</td><td>PD + residual (DR)</td><td class="num">1.41</td><td class="num">2.0</td><td class="num">2.61</td><td class="num">1.86x</td><td class="num">0</td></tr>
+<tr><td>Reference speed scale</td><td>Neural torque (DR)</td><td class="num">1.74</td><td class="num">2.0</td><td class="num">3</td><td class="num">1.73x</td><td class="num">0</td></tr>
+</tbody>
+</table><table>
+<caption>Random held-out combinations of all factors (12 combinations, one case per regime each).</caption>
+<thead>
+<tr><th>Controller</th><th class="num">Mean composite</th><th class="num">95% CI</th><th class="num">Worst combination</th><th class="num">Diverged cases</th></tr>
+</thead>
+<tbody>
+<tr><td>PD, shared gains</td><td class="num">7.16</td><td class="num">[5.44, 8.65]</td><td class="num">10.6</td><td class="num">0</td></tr>
+<tr><td>Learned gains (nominal)</td><td class="num">4.02</td><td class="num">[3.2, 4.97]</td><td class="num">6.75</td><td class="num">0</td></tr>
+<tr><td>PD + residual (nominal)</td><td class="num">7.06</td><td class="num">[5.33, 8.6]</td><td class="num">9.94</td><td class="num">0</td></tr>
+<tr><td>Neural torque (nominal)</td><td class="num">5.8</td><td class="num">[4.47, 7.18]</td><td class="num">9.61</td><td class="num">0</td></tr>
+<tr><td>Learned gains (DR)</td><td class="num">4.15</td><td class="num">[3.32, 5.09]</td><td class="num">7.35</td><td class="num">0</td></tr>
+<tr><td>PD + residual (DR)</td><td class="num">7.12</td><td class="num">[5.44, 8.55]</td><td class="num">9.94</td><td class="num">0</td></tr>
+<tr><td>Neural torque (DR)</td><td class="num">4.13</td><td class="num">[3.08, 5.42]</td><td class="num">9.81</td><td class="num">0</td></tr>
+</tbody>
+</table>
+
+<h2>Findings</h2>
+<ol>
+<li><strong>Actuation delay separates the controllers more than any other factor.</strong> At 5 ms of transport delay the shared PD's composite rises from 1.41 to 9.13 and its torque-rate RMS from 745 to 11971 Nm/s: the stiff gains tuned at 1 kHz without delay (1447 Nm/rad on joint 1, damping ratio 0.65) sit at their stability margin, and the loop breaks into a high-frequency oscillation in every regime (hold 0.51 to 13.4). PD + residual inherits these gains and fails identically. Learned gains, nominal or DR, keep their performance (1.62 to 1.76 and 1.56 to 1.69; torque rate about 750 Nm/s) because they are softer. At 10 ms everything degrades and at 20 ms every controller is unusable; no controller diverged.</li>
+<li><strong>Observation noise hurts the stiff PD most and neural torque least.</strong> With 3 mrad position noise (30 mrad/s velocity noise) the PD composite triples (1.41 to 4.38) and its torque rate rises sevenfold, because the gains amplify the noise directly; learned gains halve that degradation (3.06); neural torque, whose output is held for 10 ms, is the least affected (2.40, and 3.96 at 10 mrad against 12.06 for PD). This ordering is the mirror image of the nominal ranking.</li>
+<li><strong>Payload, inertia, centre of mass and dry friction produce graceful degradation for the PD-structured controllers.</strong> A 2 kg payload (the top of the training range) raises the PD composite from 1.41 to 1.71 and 3 kg (held out) to 2.31; learned gains degrade somewhat faster (1.62 to 2.95 at 3 kg). Dry friction up to 2 Nm changes PD and learned gains by less than 6%, but neural torque by 65% (1.89 to 3.11): without an inner feedback loop, a torque held for 10 ms cannot break stiction.</li>
+<li><strong>Dynamics randomization helped where the parameterization was fragile and not elsewhere.</strong> For neural torque DR reduced the friction degradation (3.11 to 2.70 at 2 Nm), the delay degradation at 5 ms (6.69 to 4.38) and the held-out combinations (mean composite 5.80 to 4.13). For learned gains DR improved the 3 kg payload (2.95 to 2.61) and transitions with payload, and was otherwise neutral. For PD + residual DR made no difference because its selected checkpoint is essentially the shared PD.</li>
+<li><strong>On random combinations of all factors the learned gains are the most robust controllers</strong> (mean composite 4.02 nominal, 4.15 DR, worst case 6.8 to 7.4) against 7.16 for the shared PD and 7.06 for PD + residual (worst 9.9 to 10.6); the combinations include delays of 5 to 15 ms, which dominate.</li>
+</ol>
+
+<h2>Caveats and failures</h2>
+<ul>
+<li>One seed per variant; DR effects below about 10% are within plausible seed variation.</li>
+<li>The nominal ranking (PD better than learned gains) and the robustness ranking (learned gains better than PD) are two faces of the same gain level: the shared PD is stiffer. A softer hand-set PD would be more delay-robust and less accurate; the tuned per-regime gains of Milestone 1 would be more delay-fragile still. Robustness is not a property of "learned" versus "conventional" here but of where each controller sits on the stiffness axis, which the learned controllers chose under protocol v1's objective.</li>
+<li>The learned controllers were trained under protocol v1 (no disturbances), so their absolute level carries the Milestone 2 shortfall.</li>
+<li>Friction in the torch model is a smooth tanh law; the plant uses MuJoCo's dry friction constraint, so the DR friction range is an approximation of the swept levels.</li>
+<li>Six test cases per regime and level; the curves show bootstrap intervals over the 36 cases of a level.</li>
+</ul>
+
+<h2>Next steps</h2>
+<p>Add actuation delay to the evaluation protocol's nominal plant (a real robot has several milliseconds) and to the Milestone 1 tuning, so that conventional gains are tuned with the delay they will face; the current shared gains are not a fair representative of a deployable PD once delay exists. Re-run the sweeps for the protocol v2 controllers, and test the history ablation (no history input) to see whether the learned controllers' delay and noise robustness comes from the history or from the gain level.</p>

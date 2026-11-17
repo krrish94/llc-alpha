@@ -1,0 +1,65 @@
+{
+  "path": "research/reports/12-checkpoint-1/media/task_025x.mp4",
+  "record": "research/reports/12-checkpoint-1/media/task_025x.json",
+  "frames": 1845,
+  "fps": 50,
+  "speed": 0.25,
+  "duration_s": 36.9,
+  "width": 1520,
+  "height": 750,
+  "resolution": [
+    1520,
+    750
+  ],
+  "view_size": [
+    480,
+    360
+  ],
+  "camera": "detail",
+  "title": "Task sequence, case task-test-013",
+  "plot_series": [
+    "pos_err",
+    "f_normal",
+    "tau2"
+  ],
+  "t_start": 0.0,
+  "t_end": 9.22,
+  "sample_step": 5,
+  "sample_rate_hz": 1000.0,
+  "posters": {
+    "first": "research/reports/12-checkpoint-1/media/task_025x-first.png",
+    "middle": "research/reports/12-checkpoint-1/media/task_025x-middle.png",
+    "last": "research/reports/12-checkpoint-1/media/task_025x-last.png"
+  },
+  "episodes": [
+    {
+      "method": "pd_shared",
+      "label": "PD, shared gains",
+      "npz": "runs/d5/episodes/task-test-013__pd_shared.npz",
+      "sha256": "7ef7f657103ebc8ac01d76e32435660da0270f23cace9757e419cb4eaa4237cb",
+      "joint_rmse_mrad": 16.79262936499073,
+      "peak_normal_force_n": 142.2794790015643
+    },
+    {
+      "method": "pd_residual_acmed_s02_lowrate",
+      "label": "PD + learned residual",
+      "npz": "runs/d5/episodes/task-test-013__pd_residual_acmed_s02_lowrate-s0.npz",
+      "sha256": "795d29ecf597f04163ffa8bafb325ac99c7fdf1ff24b34e2a0f24c25d17da4f5",
+      "joint_rmse_mrad": 8.02771383815675,
+      "peak_normal_force_n": 35.62004780472063
+    },
+    {
+      "method": "ppo_contact_v2",
+      "label": "PPO, contact families",
+      "npz": "runs/d5/episodes/task-test-013__ppo_contact_v2-s0.npz",
+      "sha256": "f562c98f58b0e15d775c8b6a5d809ec13c19121a3808effc69eb3b3c56a6cedf",
+      "joint_rmse_mrad": 13.199083596614026,
+      "peak_normal_force_n": 26.6817664472042
+    }
+  ],
+  "reference": "gray sphere: commanded tool position, q_ref through llc.sim.nominal.NominalModel",
+  "trace": "measured tool path over the last 0.5 s, gray (old) to method color (new)",
+  "metrics": "joint RMSE over all joints and samples from t = 0 to the displayed time (mrad); peak normal force so far (N)",
+  "scene": "llc/sim/assets/panda_scene.xml",
+  "render_seconds": 32.72
+}

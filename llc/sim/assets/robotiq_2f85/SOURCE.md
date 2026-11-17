@@ -1,0 +1,1 @@
+Robotiq 2F-85 model and meshes from MuJoCo Menagerie (google-deepmind/mujoco_menagerie, robotiq_2f85, BSD-2-Clause as per LICENSE), fetched 2026-11-16. Used by llc/sim/gripper.py, which bakes the gripper at a fixed opening into a single rigid tool body (ADR 0009).

@@ -1,0 +1,57 @@
+{
+  "path": "research/reports/18-handoff/media/push_win_100x.mp4",
+  "record": "research/reports/18-handoff/media/push_win_100x.json",
+  "frames": 355,
+  "fps": 50,
+  "speed": 1.0,
+  "duration_s": 7.1,
+  "width": 1024,
+  "height": 750,
+  "resolution": [
+    1024,
+    750
+  ],
+  "view_size": [
+    480,
+    360
+  ],
+  "camera": "detail",
+  "title": "Box pushing: a case the learned controller converts, case push-test-007",
+  "plot_series": [
+    "pos_err",
+    "f_object",
+    "tau2"
+  ],
+  "t_start": 0.0,
+  "t_end": 7.08,
+  "sample_step": 20,
+  "sample_rate_hz": 1000.0,
+  "posters": {
+    "first": "research/reports/18-handoff/media/push_win_100x-first.png",
+    "middle": "research/reports/18-handoff/media/push_win_100x-middle.png",
+    "last": "research/reports/18-handoff/media/push_win_100x-last.png"
+  },
+  "episodes": [
+    {
+      "method": "pd_shared",
+      "label": "PD, tracking-tuned",
+      "npz": "runs/m10r2/episodes_handoff/tasks__push-test-007__pd_shared.npz",
+      "sha256": "5639466be21e73cb1c61f450ab393d6fd37ff10410825d17c841481ec8c7de74",
+      "joint_rmse_mrad": 9.326504764836878,
+      "peak_normal_force_n": 32.97868798667942
+    },
+    {
+      "method": "distill_two",
+      "label": "Two-teacher student (seed 0)",
+      "npz": "runs/m10r2/episodes_handoff/tasks__push-test-007__distill_two-s0.npz",
+      "sha256": "35cbf3232bab35dadc3601459302789b4172356d9627df8b460d118076547936",
+      "joint_rmse_mrad": 2.2302473515743073,
+      "peak_normal_force_n": 0.0
+    }
+  ],
+  "reference": "gray sphere: commanded tool position, q_ref through llc.sim.nominal.NominalModel",
+  "trace": "measured tool path over the last 0.5 s, gray (old) to method color (new)",
+  "metrics": "joint RMSE over all joints and samples from t = 0 to the displayed time (mrad); peak normal force so far (N)",
+  "scene": "llc/sim/assets/panda_2f85_0800_task_push.xml",
+  "render_seconds": 4.25
+}

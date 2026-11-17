@@ -1,0 +1,120 @@
+<figure class="video wide" id="fig-video-hold">
+<video id="fig-video-hold-video" controls preload="metadata" poster="media/hold_100x-middle.png">
+<source src="media/hold_100x.mp4" type="video/mp4">
+<p class="missing">Video playback is not supported here; <a href="media/hold_100x.mp4">download the video (MP4)</a>.</p>
+</video>
+<div class="widget timeseries" data-widget="timeseries" data-src="data/ts_hold.json" data-video="fig-video-hold-video" data-video-speed="1">
+<div class="widget-body">
+<p class="missing">No static figure for this viewer; the interactive view needs JavaScript.</p>
+</div>
+</div>
+<figcaption>Hold with a 10 N tool pulse of 0.2 s at t = 1 s (the median case of the tracking-tuned PD's composite, the benchmark's representative case), real time. The learned controller holds the loaded, perturbed instance where the PD sags under the payload and the pulse: the error plot shows the deflection and its recovery; family means 1.6 against 8.1 mrad. The gray sphere is the commanded tool position; the metrics under each view accumulate causally; the plot cursor follows the video. <a class="source" href="media/hold_100x.mp4">Video (MP4)</a> <a class="source" href="data/ts_hold.json">Data (JSON)</a></figcaption>
+</figure>
+<figure class="video wide" id="fig-video-free">
+<video id="fig-video-free-video" controls preload="metadata" poster="media/free_100x-middle.png">
+<source src="media/free_100x.mp4" type="video/mp4">
+<p class="missing">Video playback is not supported here; <a href="media/free_100x.mp4">download the video (MP4)</a>.</p>
+</video>
+<div class="widget timeseries" data-widget="timeseries" data-src="data/ts_free.json" data-video="fig-video-free-video" data-video-speed="1">
+<div class="widget-body">
+<p class="missing">No static figure for this viewer; the interactive view needs JavaScript.</p>
+</div>
+</div>
+<figcaption>Free motion, real time, against the feedforward PD, the best classical controller of this family, on an instance and payload on which the nominal model is wrong (the PD at 18.0 mrad, the student at 2.4). Both follow the gray commanded tool; the error plot separates them: the feedforward does not know this robot, the learned part infers it from the history. Over the sixteen cases the student (seed 0) wins 11 and loses 5, the losses where the PD is already at 1 to 3 mrad (Section 2.3); the family means are 2.6 against 4.9 mrad. The gray sphere is the commanded tool position; the metrics under each view accumulate causally; the plot cursor follows the video. <a class="source" href="media/free_100x.mp4">Video (MP4)</a> <a class="source" href="data/ts_free.json">Data (JSON)</a></figcaption>
+</figure>
+<figure class="video wide" id="fig-video-free_payload">
+<video id="fig-video-free_payload-video" controls preload="metadata" poster="media/free_payload_100x-middle.png">
+<source src="media/free_payload_100x.mp4" type="video/mp4">
+<p class="missing">Video playback is not supported here; <a href="media/free_payload_100x.mp4">download the video (MP4)</a>.</p>
+</video>
+<div class="widget timeseries" data-widget="timeseries" data-src="data/ts_free_payload.json" data-video="fig-video-free_payload-video" data-video-speed="1">
+<div class="widget-body">
+<p class="missing">No static figure for this viewer; the interactive view needs JavaScript.</p>
+</div>
+</div>
+<figcaption>Free motion with a 3 kg payload at the tool, a held-out group (the case with the median error of the feedforward PD in the group; the payload is a point mass and is not drawn), real time. The nominal feedforward does not know the payload and the PD droops under it; the learned controller infers it from the history (family means 5.0 against 20.6 mrad). The gray sphere is the commanded tool position; the metrics under each view accumulate causally; the plot cursor follows the video. <a class="source" href="media/free_payload_100x.mp4">Video (MP4)</a> <a class="source" href="data/ts_free_payload.json">Data (JSON)</a></figcaption>
+</figure>
+<figure class="video wide" id="fig-video-contact2">
+<video id="fig-video-contact2-video" controls preload="metadata" poster="media/contact2_025x-middle.png">
+<source src="media/contact2_025x.mp4" type="video/mp4">
+<p class="missing">Video playback is not supported here; <a href="media/contact2_025x.mp4">download the video (MP4)</a>.</p>
+</video>
+<div class="widget timeseries" data-widget="timeseries" data-src="data/ts_contact2.json" data-video="fig-video-contact2-video" data-video-speed="0.25">
+<div class="widget-body">
+<p class="missing">No static figure for this viewer; the interactive view needs JavaScript.</p>
+</div>
+</div>
+<figcaption>Press and slide (the median case of the tracking-tuned PD's composite, the benchmark's representative case), quarter speed, against the cap-tuned PD (the best classical controller of this family) and the privileged oracle. The reference asks for 0.4 to 1.4 cm of depth; the force plot shows the PD pressing with its full stiffness (18 N mean over the family), the oracle and the student pressing inside the 7 to 12 N band, the student with a noisier force during the slide (the detachments of light sliding contact on this plant, report 14). The impact transient at the onset, 300 to 370 N for all three, is the blind approach, not the contact law. The gray sphere is the commanded tool position; the metrics under each view accumulate causally; the plot cursor follows the video. <a class="source" href="media/contact2_025x.mp4">Video (MP4)</a> <a class="source" href="data/ts_contact2.json">Data (JSON)</a></figcaption>
+</figure>
+<figure class="video wide" id="fig-video-blocked">
+<video id="fig-video-blocked-video" controls preload="metadata" poster="media/blocked_025x-middle.png">
+<source src="media/blocked_025x.mp4" type="video/mp4">
+<p class="missing">Video playback is not supported here; <a href="media/blocked_025x.mp4">download the video (MP4)</a>.</p>
+</video>
+<div class="widget timeseries" data-widget="timeseries" data-src="data/ts_blocked.json" data-video="fig-video-blocked-video" data-video-speed="0.25">
+<div class="widget-body">
+<p class="missing">No static figure for this viewer; the interactive view needs JavaScript.</p>
+</div>
+</div>
+<figcaption>Blocked target (the median case of the tracking-tuned PD's composite, the benchmark's representative case), quarter speed: the commanded path passes 3 to 8 cm through the surface. The PD follows its error into the surface (23 N above the cap over the family); the oracle and the student stop at the surface and wait at a bounded force (5 N above the cap, apparent stiffness 390 N/m), then follow the reference when it returns. The impact transient at the onset is alike for all three: the approach is blind. The gray sphere is the commanded tool position; the metrics under each view accumulate causally; the plot cursor follows the video. <a class="source" href="media/blocked_025x.mp4">Video (MP4)</a> <a class="source" href="data/ts_blocked.json">Data (JSON)</a></figcaption>
+</figure>
+<figure class="video wide" id="fig-video-blocked_soft">
+<video id="fig-video-blocked_soft-video" controls preload="metadata" poster="media/blocked_soft_025x-middle.png">
+<source src="media/blocked_soft_025x.mp4" type="video/mp4">
+<p class="missing">Video playback is not supported here; <a href="media/blocked_soft_025x.mp4">download the video (MP4)</a>.</p>
+</video>
+<div class="widget timeseries" data-widget="timeseries" data-src="data/ts_blocked_soft.json" data-video="fig-video-blocked_soft-video" data-video-speed="0.25">
+<div class="widget-body">
+<p class="missing">No static figure for this viewer; the interactive view needs JavaScript.</p>
+</div>
+</div>
+<figcaption>Blocked target on a compliant surface of 500 N/m, a held-out group (the case with the median composite of the cap-tuned PD in the group), quarter speed. The surface yields, so the controller's stiffness sets how deep it sinks: the PD keeps its own stiffness (contact stiffness 920 N/m over the group) and pushes hardest, the oracle holds its 500 N/m spring at 15 N, and the student lies between them in this case (group mean 450 N/m) although it never saw a compliant surface in training; it chatters briefly after the release. The gray sphere is the commanded tool position; the metrics under each view accumulate causally; the plot cursor follows the video. <a class="source" href="media/blocked_soft_025x.mp4">Video (MP4)</a> <a class="source" href="data/ts_blocked_soft.json">Data (JSON)</a></figcaption>
+</figure>
+<figure class="video wide" id="fig-video-task">
+<video id="fig-video-task-video" controls preload="metadata" poster="media/task_100x-middle.png">
+<source src="media/task_100x.mp4" type="video/mp4">
+<p class="missing">Video playback is not supported here; <a href="media/task_100x.mp4">download the video (MP4)</a>.</p>
+</video>
+<div class="widget timeseries" data-widget="timeseries" data-src="data/ts_task.json" data-video="fig-video-task-video" data-video-speed="1">
+<div class="widget-body">
+<p class="missing">No static figure for this viewer; the interactive view needs JavaScript.</p>
+</div>
+</div>
+<figcaption>The task sequence (the median case of the tracking-tuned PD's composite, the benchmark's representative case), a family held out from training, real time: reach, press 1 cm, slide 10 cm, lift, transport, press 0.5 cm, lift. The force plot shows the two presses: the feedforward PD at 10 N above the cap over the family, the student at 2 N, with the oracle's profile; the impact transients at the two onsets (100 to 130 N) are blind approaches for all three. The gray sphere is the commanded tool position; the metrics under each view accumulate causally; the plot cursor follows the video. <a class="source" href="media/task_100x.mp4">Video (MP4)</a> <a class="source" href="data/ts_task.json">Data (JSON)</a></figcaption>
+</figure>
+<figure class="video wide" id="fig-video-push_win">
+<video id="fig-video-push_win-video" controls preload="metadata" poster="media/push_win_100x-middle.png">
+<source src="media/push_win_100x.mp4" type="video/mp4">
+<p class="missing">Video playback is not supported here; <a href="media/push_win_100x.mp4">download the video (MP4)</a>.</p>
+</video>
+<div class="widget timeseries" data-widget="timeseries" data-src="data/ts_push_win.json" data-video="fig-video-push_win-video" data-video-speed="1">
+<div class="widget-body">
+<p class="missing">No static figure for this viewer; the interactive view needs JavaScript.</p>
+</div>
+</div>
+<figcaption>Box pushing with the closed gripper, real time, case push-test-007: selected as the case with the median yaw reduction among the 4 of 16 pushes that fail for the PD (box turned beyond 15 degrees) and succeed for the student, which also loses 1 of the PD's 5 successes (8 successes in all). The force plot is the tool-box contact force. The box turns when the fingertip faces meet it off-centre; the student's smaller tracking error keeps the push through the box's centre. The gray sphere is the commanded tool position; the metrics under each view accumulate causally; the plot cursor follows the video. <a class="source" href="media/push_win_100x.mp4">Video (MP4)</a> <a class="source" href="data/ts_push_win.json">Data (JSON)</a></figcaption>
+</figure>
+<figure class="video wide" id="fig-video-push_fail">
+<video id="fig-video-push_fail-video" controls preload="metadata" poster="media/push_fail_100x-middle.png">
+<source src="media/push_fail_100x.mp4" type="video/mp4">
+<p class="missing">Video playback is not supported here; <a href="media/push_fail_100x.mp4">download the video (MP4)</a>.</p>
+</video>
+<div class="widget timeseries" data-widget="timeseries" data-src="data/ts_push_fail.json" data-video="fig-video-push_fail-video" data-video-speed="1">
+<div class="widget-body">
+<p class="missing">No static figure for this viewer; the interactive view needs JavaScript.</p>
+</div>
+</div>
+<figcaption>Box pushing, real time, case push-test-009: selected as the median PD yaw among the 7 of 16 pushes that fail for both controllers. The box turns for both; the low-level controller cannot correct a push line the task policy chose badly, which is why box yaw is a task-policy problem (Section 6). The gray sphere is the commanded tool position; the metrics under each view accumulate causally; the plot cursor follows the video. <a class="source" href="media/push_fail_100x.mp4">Video (MP4)</a> <a class="source" href="data/ts_push_fail.json">Data (JSON)</a></figcaption>
+</figure>
+<figure class="video wide" id="fig-video-pick">
+<video id="fig-video-pick-video" controls preload="metadata" poster="media/pick_100x-middle.png">
+<source src="media/pick_100x.mp4" type="video/mp4">
+<p class="missing">Video playback is not supported here; <a href="media/pick_100x.mp4">download the video (MP4)</a>.</p>
+</video>
+<div class="widget timeseries" data-widget="timeseries" data-src="data/ts_pick.json" data-video="fig-video-pick-video" data-video-speed="1">
+<div class="widget-body">
+<p class="missing">No static figure for this viewer; the interactive view needs JavaScript.</p>
+</div>
+</div>
+<figcaption>Pick-and-place, real time, case pick-test-013: the gripper carries a 0.3 kg block to a target, descends 2 mm below contact, releases and lifts (the case with the median placing force of the feedforward PD). The force plot is the block-table contact force: the PD presses the block onto the table with its full stiffness (14 N over the family), the student places it at 5 N and tracks the lift after the payload change with half the error. The gray sphere is the commanded tool position; the metrics under each view accumulate causally; the plot cursor follows the video. <a class="source" href="media/pick_100x.mp4">Video (MP4)</a> <a class="source" href="data/ts_pick.json">Data (JSON)</a></figcaption>
+</figure>

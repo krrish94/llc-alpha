@@ -1,0 +1,113 @@
+<h2>Question</h2>
+<p>Does model-free training with PPO in the plant, under the same curriculum, observations, parameterizations and objective as the model-based route of Milestone 2, reach the same performance on the same test cases, and at what cost in plant interaction, wall time and tuning effort?</p>
+
+<h2>Setup</h2>
+<p>PPO (clipped objective, GAE, 6 epochs per update) runs on 32 parallel plants; an environment step is one network period (10 ms), with the same 5 ms latency and 100 ms history as the learned controller, so trained policies are exported and evaluated through the identical code path. The reward is the negative per-step training loss of ADR 0003, the curriculum has the same three stages (150, 150 and 400 updates of 6400 environment steps), Gaussian exploration acts on the raw network output with a learned state-independent standard deviation (initial 0.3; 0.1 for the warm-started neural torque), and checkpoints are selected on the same 12 validation cases. Neural torque is initialized from the same PD imitation as in Milestone 2. A first, shorter budget (240 updates, neural torque without warm start) is reported as a budget-sensitivity point.</p>
+
+<h2>Training cost</h2>
+<p>Both routes were validated on the same 12 cases in the plant. PPO consumed 4.5 million plant steps (45 million physics steps) per long run in 21 to 30 minutes; the model-based route consumed no plant interaction and about 20 to 25 minutes of wall time per run for 4 million model steps. Tuning effort: PPO needed three variants for neural torque (no warm start, warm start with exploration 0.1, warm start with exploration 0.02) and still failed; the model-based route needed the warm start and one loss-weight change (ADR 0003).</p><table>
+<caption>Training cost. PPO steps are network periods (10 ms) in the plant; BPTT steps are 2.5 ms model steps. Validation evaluations use the same 12 cases in MuJoCo for both routes.</caption>
+<thead>
+<tr><th>Run</th><th>Route</th><th class="num">Plant environment steps</th><th class="num">Physics / model steps</th><th class="num">Wall time (min)</th><th class="num">Validation evaluations</th></tr>
+</thead>
+<tbody>
+<tr><td>ppo_learned_gains_long-s0</td><td>PPO (plant)</td><td class="num">4480000</td><td class="num">44800000</td><td class="num">29</td><td class="num">28</td></tr>
+<tr><td>ppo_pd_residual_long-s0</td><td>PPO (plant)</td><td class="num">4480000</td><td class="num">44800000</td><td class="num">30</td><td class="num">28</td></tr>
+<tr><td>ppo_neural_torque_long-s0</td><td>PPO (plant)</td><td class="num">4480000</td><td class="num">44800000</td><td class="num">21</td><td class="num">28</td></tr>
+<tr><td>ppo_learned_gains-s0</td><td>PPO (plant)</td><td class="num">1536000</td><td class="num">15360000</td><td class="num">8</td><td class="num">12</td></tr>
+<tr><td>ppo_pd_residual-s0</td><td>PPO (plant)</td><td class="num">1536000</td><td class="num">15360000</td><td class="num">8</td><td class="num">12</td></tr>
+<tr><td>ppo_neural_torque_lownoise-s0</td><td>PPO (plant)</td><td class="num">1536000</td><td class="num">15360000</td><td class="num">9</td><td class="num">12</td></tr>
+<tr><td>learned_gains-s0</td><td>BPTT (known model)</td><td class="num">0 (model only)</td><td class="num">4096000 model steps</td><td class="num">18</td><td class="num">7</td></tr>
+<tr><td>pd_residual-s0</td><td>BPTT (known model)</td><td class="num">0 (model only)</td><td class="num">4096000 model steps</td><td class="num">19</td><td class="num">7</td></tr>
+<tr><td>neural_torque-s0</td><td>BPTT (known model)</td><td class="num">0 (model only)</td><td class="num">4096000 model steps</td><td class="num">18</td><td class="num">7</td></tr>
+</tbody>
+</table><figure id="fig-efficiency" class="wide">
+<img src="figures/efficiency.svg" alt="Validation composite in the plant against environment steps (PPO) and wall time (both routes, dashed = PPO). Lower is better.">
+<figcaption>Validation composite in the plant against environment steps (PPO) and wall time (both routes, dashed = PPO). Lower is better.</figcaption>
+</figure>
+
+<h2>Results in the plant</h2>
+<p>Runs with "long" are the 700-update budget, runs without suffix the 240-update budget; the lownoise run is the neural-torque attempt with exploration standard deviation 0.02. Every PPO run's best validation checkpoint is its first (update 19 or 24), so the reported PPO controllers are essentially the initial policies after a few updates.</p><table>
+<caption>Composite per regime on the test split (16 cases per regime).</caption>
+<thead>
+<tr><th>Controller (route)</th><th>Seed</th><th class="num">Hold</th><th class="num">Smooth tracking</th><th class="num">Policy-like targets (20 Hz hold)</th><th class="num">Step targets</th><th class="num">Sustained contact</th><th class="num">Contact transitions</th><th class="num">Diverged</th></tr>
+</thead>
+<tbody>
+<tr><td>learned_gains (PPO)</td><td>0</td><td class="num">1.95</td><td class="num">0.50</td><td class="num">1.11</td><td class="num">2.62</td><td class="num">5.09</td><td class="num">2.45</td><td class="num">0</td></tr>
+<tr><td>learned_gains (PPO)</td><td>0</td><td class="num">1.93</td><td class="num">0.49</td><td class="num">1.10</td><td class="num">2.58</td><td class="num">5.10</td><td class="num">2.41</td><td class="num">0</td></tr>
+<tr><td>pd_residual (PPO)</td><td>0</td><td class="num">0.71</td><td class="num">0.43</td><td class="num">1.33</td><td class="num">2.33</td><td class="num">2.19</td><td class="num">2.96</td><td class="num">0</td></tr>
+<tr><td>pd_residual (PPO)</td><td>0</td><td class="num">0.62</td><td class="num">0.35</td><td class="num">1.29</td><td class="num">2.25</td><td class="num">1.97</td><td class="num">2.71</td><td class="num">0</td></tr>
+<tr><td>neural_torque (PPO)</td><td>0</td><td class="num">24.17</td><td class="num">16.99</td><td class="num">7.40</td><td class="num">9.32</td><td class="num">10.27</td><td class="num">15.44</td><td class="num">0</td></tr>
+<tr><td>neural_torque (PPO)</td><td>0</td><td class="num">44.14</td><td class="num">21.02</td><td class="num">8.66</td><td class="num">10.34</td><td class="num">14.12</td><td class="num">16.15</td><td class="num">0</td></tr>
+<tr><td>neural_torque (PPO)</td><td>0</td><td class="num">25.92</td><td class="num">17.78</td><td class="num">7.49</td><td class="num">9.93</td><td class="num">10.85</td><td class="num">15.25</td><td class="num">0</td></tr>
+<tr><td>learned_gains (BPTT)</td><td>0</td><td class="num">1.06</td><td class="num">0.32</td><td class="num">0.74</td><td class="num">2.47</td><td class="num">2.54</td><td class="num">2.35</td><td class="num">0</td></tr>
+<tr><td>pd_residual (BPTT)</td><td>0</td><td class="num">0.43</td><td class="num">0.17</td><td class="num">1.21</td><td class="num">1.98</td><td class="num">2.05</td><td class="num">2.29</td><td class="num">0</td></tr>
+<tr><td>neural_torque (BPTT)</td><td>0</td><td class="num">0.93</td><td class="num">0.43</td><td class="num">0.97</td><td class="num">2.20</td><td class="num">3.87</td><td class="num">2.12</td><td class="num">0</td></tr>
+<tr><td>PD, shared gains</td><td>—</td><td class="num">0.51</td><td class="num">0.18</td><td class="num">1.21</td><td class="num">2.00</td><td class="num">1.98</td><td class="num">2.30</td><td class="num">0</td></tr>
+<tr><td>PD, gains tuned per regime</td><td>—</td><td class="num">0.22</td><td class="num">0.09</td><td class="num">0.56</td><td class="num">1.88</td><td class="num">1.70</td><td class="num">1.38</td><td class="num">0</td></tr>
+<tr><td>Computed torque (privileged)</td><td>—</td><td class="num">0.28</td><td class="num">0.05</td><td class="num">2.04</td><td class="num">12.78</td><td class="num">7.29</td><td class="num">5.09</td><td class="num">0</td></tr>
+</tbody>
+</table><table class="wide">
+<caption>Primary metrics (mean over cases; paired difference against PD with shared gains with 95% bootstrap interval).</caption>
+<thead>
+<tr><th>Regime</th><th>Metric</th><th class="num">PD, shared gains</th><th class="num">PD, gains tuned per regime</th><th class="num">Computed torque (privileged)</th><th class="num">Learned PD gains (PPO)</th><th class="num">PD + learned residual (PPO)</th><th class="num">Neural torque (PPO)</th><th class="num">Learned PD gains (BPTT)</th><th class="num">PD + learned residual (BPTT)</th><th class="num">Neural torque (BPTT)</th></tr>
+</thead>
+<tbody>
+<tr><td>Hold</td><td>Position RMSE (rad)</td><td class="num">0.000574</td><td class="num">0.000256 (-0.00032*)</td><td class="num">0.000298 (-0.00028*)</td><td class="num">0.003 (0.0024*)</td><td class="num">0.0015 (0.00092*)</td><td class="num">0.138 (0.14*)</td><td class="num">0.00121 (0.00063*)</td><td class="num">0.000557 (-1.8e-05)</td><td class="num">0.00178 (0.0012*)</td></tr>
+<tr><td>Hold</td><td>Peak deflection under 10 N pulse (m)</td><td class="num">0.00443</td><td class="num">0.00177 (-0.0027*)</td><td class="num">0.00232 (-0.0021*)</td><td class="num">0.0163 (0.012*)</td><td class="num">0.0037 (-0.00073*)</td><td class="num">0.0764 (0.072*)</td><td class="num">0.00932 (0.0049*)</td><td class="num">0.00347 (-0.00096*)</td><td class="num">0.00553 (0.0011*)</td></tr>
+<tr><td>Smooth tracking</td><td>Position RMSE (rad)</td><td class="num">0.00266</td><td class="num">0.000923 (-0.0017*)</td><td class="num">0.000187 (-0.0025*)</td><td class="num">0.00874 (0.0061*)</td><td class="num">0.00454 (0.0019*)</td><td class="num">0.191 (0.19*)</td><td class="num">0.00528 (0.0026*)</td><td class="num">0.00171 (-0.00095*)</td><td class="num">0.00344 (0.00078*)</td></tr>
+<tr><td>Smooth tracking</td><td>Torque rate RMS (Nm/s)</td><td class="num">48.4</td><td class="num">41.6 (-6.8*)</td><td class="num">41.7 (-6.7*)</td><td class="num">55.5 (7.1)</td><td class="num">163 (1.1e+02*)</td><td class="num">9.04e+03 (9e+03*)</td><td class="num">56 (7.7*)</td><td class="num">81 (33*)</td><td class="num">263 (2.1e+02*)</td></tr>
+<tr><td>Policy-like targets (20 Hz hold)</td><td>Position RMSE (rad)</td><td class="num">0.0145</td><td class="num">0.0156 (0.0011)</td><td class="num">0.00623 (-0.0083*)</td><td class="num">0.0409 (0.026*)</td><td class="num">0.014 (-0.00056*)</td><td class="num">0.194 (0.18*)</td><td class="num">0.0112 (-0.0033*)</td><td class="num">0.0142 (-0.0003*)</td><td class="num">0.0293 (0.015*)</td></tr>
+<tr><td>Policy-like targets (20 Hz hold)</td><td>Torque rate RMS (Nm/s)</td><td class="num">2.31e+03</td><td class="num">619 (-1.7e+03*)</td><td class="num">4.79e+03 (2.5e+03*)</td><td class="num">722 (-1.6e+03*)</td><td class="num">2.57e+03 (2.6e+02*)</td><td class="num">9.93e+03 (7.6e+03*)</td><td class="num">1.29e+03 (-1e+03*)</td><td class="num">2.32e+03 (6.4*)</td><td class="num">957 (-1.4e+03*)</td></tr>
+<tr><td>Step targets</td><td>Position RMSE (rad)</td><td class="num">0.0303</td><td class="num">0.03 (-0.00027*)</td><td class="num">0.362 (0.33*)</td><td class="num">0.0442 (0.014*)</td><td class="num">0.0304 (0.00012*)</td><td class="num">0.181 (0.15*)</td><td class="num">0.0304 (0.00016)</td><td class="num">0.0301 (-0.00017*)</td><td class="num">0.037 (0.0067*)</td></tr>
+<tr><td>Step targets</td><td>Settling time after step (s)</td><td class="num">0.157</td><td class="num">0.124 (-0.033*)</td><td class="num">0.733 (0.58*)</td><td class="num">0.361 (0.2*)</td><td class="num">0.201 (0.044*)</td><td class="num">0.749 (0.59*)</td><td class="num">0.263 (0.11*)</td><td class="num">0.145 (-0.012*)</td><td class="num">0.269 (0.11*)</td></tr>
+<tr><td>Step targets</td><td>Torque rate RMS (Nm/s)</td><td class="num">2.02e+03</td><td class="num">2.07e+03 (50*)</td><td class="num">2.77e+03 (7.5e+02*)</td><td class="num">1.27e+03 (-7.5e+02*)</td><td class="num">2.25e+03 (2.3e+02*)</td><td class="num">9.18e+03 (7.2e+03*)</td><td class="num">1.85e+03 (-1.7e+02*)</td><td class="num">2.05e+03 (30*)</td><td class="num">1.4e+03 (-6.2e+02*)</td></tr>
+<tr><td>Sustained contact</td><td>Tangential tool error during slide (m)</td><td class="num">0.00712</td><td class="num">0.00576 (-0.0014*)</td><td class="num">0.0226 (0.016*)</td><td class="num">0.0116 (0.0045*)</td><td class="num">0.00762 (0.0005*)</td><td class="num">0.0674 (0.06*)</td><td class="num">0.00884 (0.0017*)</td><td class="num">0.00691 (-0.00021*)</td><td class="num">0.00772 (0.0006*)</td></tr>
+<tr><td>Sustained contact</td><td>Normal force std in contact phase (N)</td><td class="num">6.25</td><td class="num">5.55 (-0.69*)</td><td class="num">24.6 (18*)</td><td class="num">8.91 (2.7*)</td><td class="num">5.84 (-0.41)</td><td class="num">3.96 (-2.3)</td><td class="num">7.22 (0.97*)</td><td class="num">6.72 (0.48*)</td><td class="num">9.22 (3*)</td></tr>
+<tr><td>Sustained contact</td><td>Contact losses of 5 ms or more during contact phase (-)</td><td class="num">0.125</td><td class="num">0 (-0.12)</td><td class="num">1.44 (1.3*)</td><td class="num">42.8 (43*)</td><td class="num">2.03 (1.9)</td><td class="num">2.71 (2.6*)</td><td class="num">4.12 (4*)</td><td class="num">0 (-0.12)</td><td class="num">23.8 (24*)</td></tr>
+<tr><td>Contact transitions</td><td>Peak normal force (N)</td><td class="num">91.8</td><td class="num">31.7 (-60*)</td><td class="num">179 (87*)</td><td class="num">75.6 (-16*)</td><td class="num">97.4 (5.5)</td><td class="num">156 (64*)</td><td class="num">88.3 (-3.6)</td><td class="num">89.9 (-1.9*)</td><td class="num">67.7 (-24*)</td></tr>
+<tr><td>Contact transitions</td><td>Impulse in first 100 ms of contact (N s)</td><td class="num">6.46</td><td class="num">0.852 (-5.6*)</td><td class="num">7.65 (1.2*)</td><td class="num">4.56 (-1.9*)</td><td class="num">6.63 (0.17)</td><td class="num">4.94 (-1.5*)</td><td class="num">4.57 (-1.9*)</td><td class="num">6.26 (-0.19*)</td><td class="num">4.16 (-2.3*)</td></tr>
+<tr><td>Contact transitions</td><td>Tracking recovery after release (s)</td><td class="num">0.0428</td><td class="num">0.0578 (0.015*)</td><td class="num">0.103 (0.061*)</td><td class="num">0.124 (0.081*)</td><td class="num">0.0803 (0.038*)</td><td class="num">0.892 (0.85*)</td><td class="num">0.0506 (0.0078*)</td><td class="num">0.0413 (-0.0015*)</td><td class="num">0.0651 (0.022*)</td></tr>
+<tr><td>Contact transitions</td><td>Position RMSE (rad)</td><td class="num">0.0061</td><td class="num">0.00876 (0.0027*)</td><td class="num">0.0174 (0.011*)</td><td class="num">0.0097 (0.0036*)</td><td class="num">0.01 (0.0039*)</td><td class="num">0.105 (0.099*)</td><td class="num">0.0061 (-2.9e-06)</td><td class="num">0.00596 (-0.00014*)</td><td class="num">0.008 (0.0019*)</td></tr>
+</tbody>
+</table><figure class="widget compare" id="fig-compare" data-widget="compare" data-src="data/compare.json" data-regime="step" data-metric="pos_rmse">
+<div class="widget-body">
+<p class="selection">Selection: Step targets, Position RMSE (rad); n = 16 cases. Mean with 95% bootstrap CI (1000 resamples); difference vs PD, shared gains is paired by case, failed cases dropped from the pair.</p>
+<table class="compare-table">
+<thead>
+<tr><th>Method</th><th class="num">Mean</th><th class="num">95% CI</th><th class="num">n</th><th class="num">Δ vs reference</th><th class="num">95% CI (paired)</th><th class="num">Pairs</th></tr>
+</thead>
+<tbody>
+<tr><td>PD, shared gains</td><td class="num">0.03029</td><td class="num">[0.02897, 0.03159]</td><td class="num">16</td><td class="num">reference</td><td class="num">—</td><td class="num">—</td></tr>
+<tr><td>PD, gains tuned per regime</td><td class="num">0.03002</td><td class="num">[0.02865, 0.0314]</td><td class="num">16</td><td class="num">-0.0002708</td><td class="num">[-0.0004019, -0.0001559]</td><td class="num">16</td></tr>
+<tr><td>Computed torque (privileged)</td><td class="num">0.3618</td><td class="num">[0.2647, 0.4709]</td><td class="num">16</td><td class="num">0.3315</td><td class="num">[0.2364, 0.4389]</td><td class="num">16</td></tr>
+<tr><td>Learned PD gains (PPO)</td><td class="num">0.0442</td><td class="num">[0.04264, 0.04565]</td><td class="num">16</td><td class="num">0.01392</td><td class="num">[0.01342, 0.01438]</td><td class="num">16</td></tr>
+<tr><td>PD + learned residual (PPO)</td><td class="num">0.0304</td><td class="num">[0.02907, 0.03176]</td><td class="num">16</td><td class="num">0.0001166</td><td class="num">[1.808e-05, 0.0002022]</td><td class="num">16</td></tr>
+<tr><td>Neural torque (PPO)</td><td class="num">0.1811</td><td class="num">[0.1702, 0.1932]</td><td class="num">16</td><td class="num">0.1508</td><td class="num">[0.1387, 0.1624]</td><td class="num">16</td></tr>
+<tr><td>Learned PD gains (BPTT)</td><td class="num">0.03045</td><td class="num">[0.02894, 0.03197]</td><td class="num">16</td><td class="num">0.0001592</td><td class="num">[-0.00015, 0.0004369]</td><td class="num">16</td></tr>
+<tr><td>PD + learned residual (BPTT)</td><td class="num">0.03011</td><td class="num">[0.02874, 0.03146]</td><td class="num">16</td><td class="num">-0.0001741</td><td class="num">[-0.0002198, -0.0001234]</td><td class="num">16</td></tr>
+<tr><td>Neural torque (BPTT)</td><td class="num">0.03699</td><td class="num">[0.03559, 0.03829]</td><td class="num">16</td><td class="num">0.006699</td><td class="num">[0.006253, 0.007239]</td><td class="num">16</td></tr>
+</tbody>
+</table>
+</div>
+<figcaption>Per-case metric values on the test split for PPO and BPTT controllers and the baselines. <a class="source" href="data/compare.json">Data (JSON)</a></figcaption>
+</figure>
+
+<h2>Findings</h2>
+<ol>
+<li><strong>PPO did not reach the model-based route for any parameterization.</strong> Mean composite over regimes: learned gains 2.29 (PPO) against 1.58 (model-based), PD + residual 1.66 and 1.53 (long and short budget) against 1.36, neural torque 14 to 19 against 1.75. The shared PD scores 1.37. The ordering between parameterizations is the same as in Milestone 2, but every PPO controller is worse than its model-based twin.</li>
+<li><strong>PPO's training reward improved while its plant validation worsened.</strong> For learned gains the mean per-step reward rose from -14 to -11 over 700 updates while the validation composite rose from 2.04 to 2.46; for PD + residual the reward rose from -16 to -9 while validation went from 1.63 to about 3.6. The policy optimised the reward on its own 2 s training windows and exploration-perturbed trajectories and lost the deterministic, full-episode behaviour the composite measures. The same objective mismatch affected the model-based route (report 02, finding 5) but far less, because backpropagation through time optimises the deterministic closed loop directly.</li>
+<li><strong>Neural torque is not trainable with PPO in this setup.</strong> Starting from the PD-imitation policy, 24 updates with exploration noise of 0.1 (about 9 Nm on the large joints every 10 ms) already drove the arm into the table (validation 13.3, reward -300); exploration of 0.02 collapsed it further (validation 65 to 128, reward below -10000). A torque policy at 100 Hz has no inner loop to absorb exploration noise, so every exploratory step is a large open-loop torque error.</li>
+<li><strong>Sample efficiency.</strong> The best PPO checkpoints were reached after 160 thousand plant steps; further plant interaction up to 4.5 million steps did not help under this reward. The model-based route needed no plant interaction beyond what was used to calibrate the contact model (four episodes).</li>
+</ol>
+
+<h2>Caveats and failures</h2>
+<ul>
+<li>One seed per run; PPO hyperparameters (learning rate 3e-4, 6 epochs, clip 0.2, GAE 0.95, 32 environments) were set once from common practice and not tuned beyond the three neural-torque variants; the result is a budget- and tuning-limited negative result for PPO, not a bound on what PPO can do here. The integrity rules of the agenda apply: PPO outcomes do not gate the model-based work.</li>
+<li>The reward is the negative of the model-based loss per 10 ms step, normalised by a running return scale; reward normalisation and advantage normalisation change the effective weighting between regimes relative to the model-based loss.</li>
+<li>Exploration noise acts on the raw network output before the bounded decoding, so its torque effect depends on the operating point; this was not calibrated.</li>
+<li>PPO ran in the nominal plant (no disturbance pulses), as protocol v1; the Milestone 2 diagnosis of the hold regime applies.</li>
+</ul>
+
+<h2>Next steps</h2>
+<p>If PPO is pursued further: evaluate the deterministic policy on full episodes inside the training loop and use that for early stopping, scale exploration per parameterization (gains and residual tolerate noise, torque does not), and include the validation-protocol disturbances in the environment. Given its plant-interaction cost and the results, the model-based routes remain the primary line.</p>

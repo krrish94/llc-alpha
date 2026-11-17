@@ -1,0 +1,153 @@
+{
+  "project": {
+    "title": "Learned low-level controllers",
+    "subtitle": null
+  },
+  "pages": [],
+  "reports": [
+    {
+      "id": "01-baselines",
+      "title": "Milestone 1: conventional-controller baselines and headroom",
+      "date": "2026-11-15",
+      "milestone": 1,
+      "status": "complete",
+      "finding": "Per-regime PD tuning cuts position error by 55 to 65% in hold and smooth tracking and torque rate by 73% for policy-like targets, but the tuned gain sets are mutually incompatible; headroom on steps and sustained contact is small."
+    },
+    {
+      "id": "02-known-model",
+      "title": "Milestone 2: controllers learned through the known differentiable model",
+      "date": "2026-11-15",
+      "milestone": 2,
+      "status": "complete (protocols v1 and v2)",
+      "finding": "No parameterization captured the headroom (mean composite 1.34 to 1.69 against 1.37 for shared PD and 0.97 for per-regime PD); PD + residual cut smooth-tracking error by 36% and learned gains halved torque rate on policy-like targets. Validation worsens whenever the contact stage enters training while the in-model loss falls: the policies exploit the penalty contact model. Adding disturbance pulses (protocol v2) helped hold only."
+    },
+    {
+      "id": "03-robustness",
+      "title": "Milestone 3: robustness to changed dynamics and dynamics randomization",
+      "date": "2026-11-15",
+      "milestone": 3,
+      "status": "complete (protocol v1)",
+      "finding": "A 5 ms actuation delay breaks the stiff shared PD into oscillation (composite x6.5) while learned gains are unaffected; observation noise hurts PD most and neural torque least; payload, inertia and friction degrade PD-structured controllers gracefully; randomization helped neural torque and not the others."
+    },
+    {
+      "id": "04-learned-model",
+      "title": "Milestone 4: learned dynamics model as the training medium",
+      "date": "2026-11-15",
+      "milestone": 4,
+      "status": "complete (protocol v1)",
+      "finding": "A dynamics model learned from plant data predicts 100 ms ahead within 2 to 14 mrad, agrees with the known model's gradients (cosine 0.96 to 0.97), and controllers trained through it match those trained through the known model on every regime; the black-box model is three times cheaper to train through."
+    },
+    {
+      "id": "05-ppo",
+      "title": "Milestone 5: PPO against the model-based routes",
+      "date": "2026-11-15",
+      "milestone": 5,
+      "status": "complete (protocol v1, budget-limited)",
+      "finding": "PPO with the same objective, curriculum and parameterizations was worse than backpropagation through the model for every parameterization (mean composite 2.29 vs 1.58 for learned gains), improved its training reward while plant validation worsened, and could not train neural torque at all; it used 4.5 million plant steps per run."
+    },
+    {
+      "id": "06-phases",
+      "title": "Milestone 6: multi-phase trajectories against fixed and phase-scheduled gains",
+      "date": "2026-11-15",
+      "milestone": 6,
+      "status": "complete (protocol v1)",
+      "finding": "Oracle phase-scheduled gains cut impact peaks at high approach speed (241 to 82 N with a 200 ms blend) but produce torque spikes at hard switches and fail with a 1 kg payload; protocol v1 learned controllers roughly match fixed gains, with 20 to 30% lower onset impulse for learned gains."
+    },
+    {
+      "id": "07-dd-baselines",
+      "title": "Deep dive D1: fixed PD under protocol v2 (instances, blocked targets, compliance metrics)",
+      "date": "2026-11-15",
+      "milestone": 7,
+      "status": "complete (re-evaluated 2026-11-16 with the corrected harness)",
+      "finding": "On the robot instances with payloads neither fixed gain set is compliant: blocked-target excess force is 110 N for the stiff v1 set and 22.5 N for the soft v2 set (4.9 N on the nominal robot of the first version), and the soft set sags under payloads (hold error 16.7 vs 2.8 mrad, 49 mrad free-motion error at 3 kg). No fixed gain set is both accurate and compliant; payload identification is the first thing a learned controller can add."
+    },
+    {
+      "id": "08-dd-controllers",
+      "title": "Deep dive D2: PD + residual and neural torque at 1 kHz trained through MuJoCo gradients",
+      "date": "2026-11-15",
+      "milestone": 8,
+      "status": "complete for seed 0 (re-evaluated 2026-11-16 with the corrected harness; follow-up arms superseded by D3)",
+      "finding": "On the instance distribution the learned controllers track better than the soft PD (hold 3.4 to 5 mrad vs 16.7: they infer the payload from the history) but are not compliant on blocked targets (neural torque 136 to 141 N excess force, residual 42 N with force terms and 79 N without, soft PD 22.5 N). The force terms buy compliance for the residual where the target is nearly feasible (task excess 0.7 N vs 3.9 for the PD) and cost torque smoothness and training stability."
+    },
+    {
+      "id": "09-dd-gradients",
+      "title": "Deep dive D3: actor-critic, learned-model gradients and clipping for compliance",
+      "date": "2026-11-16",
+      "milestone": 9,
+      "status": "in progress (seed 0 of the rate-light arms evaluated; seeds, neural torque, imagined and force-term arms training)",
+      "finding": "Protocol erratum: all earlier v2 numbers were on the nominal robot; on the instances with payloads the tuned PD's blocked excess force is 22.5 N, not 4.9, and its hold error 16.7 mrad. A PD + residual trained by short-horizon actor-critic through median-clipped MuJoCo gradients with a light torque-rate penalty beats the tuned PD on every family and held-out group (hold 6.1 vs 16.7 mrad, free 13.4 vs 19.1 mrad, contact peak 80 vs 128 N, task peak 37 vs 123 N, 3 kg payload task excess 1 vs 18 N); on deep blocked targets its excess force equals the PD's (23 N) because the narrow tracking kernel saturates there, the knob being the kernel width (16 N at 50 mrad, 10 N under the first reward that rewarded softness)."
+    },
+    {
+      "id": "10-dd-ppo",
+      "title": "Deep dive D4: PPO in the plant for the residual controller",
+      "date": "2026-11-16",
+      "milestone": 10,
+      "status": "complete",
+      "finding": "PPO in the plant is cheap (128k physics steps per 3.6 s update; 16 arms in one afternoon) and improves what it is rewarded for: the free-space arm improves every family it trains on. On the test protocol the contact-trained arms end at parity with the warm start (in-distribution composite 2.73 to 2.98 against 2.75); the contact-family arms cut excess and peak forces by a factor of two to four on every contact family but lose contact more often, press less and track worse in free space. No arm improved the three contact-maintenance metrics on which every learned controller is worse than the PD: contact losses, press deficit and recovery after a blocked release. The saved episodes show a learned flinch at the reward's 30 N soft limit; the training reward evaluated on saved episodes already prefers yielding on blocked targets (optimisation problem) and prefers intermittent light contact on the task family (reward problem). Two validation cases per family misranked the contact arms."
+    },
+    {
+      "id": "11-dd-contact",
+      "title": "Deep dive D5: contact maintenance under a 15 N cap",
+      "date": "2026-11-16",
+      "milestone": 11,
+      "status": "in progress (stage 1 PPO arms evaluated; actor-critic arms and stage 2 training)",
+      "finding": "Three harness defects fixed (blocked phases, wall link collisions, two-case validation). The cap reward with contact-maintenance terms ranks a privileged compliant exemplar first on both surface families. Stage 1 PPO arms improve on the warm start under the cap (4.79 to 4.83 against 4.96; PD 5.95) by pushing less, but remain far from compliant (apparent stiffness 1300 N/m on blocked targets) and the gain-residual multipliers were never explored at std 0.05."
+    },
+    {
+      "id": "12-checkpoint-1",
+      "title": "Checkpoint 1: learned low-level controllers against a tuned PD",
+      "date": "2026-11-16",
+      "milestone": 12,
+      "status": "checkpoint (standalone summary)",
+      "finding": "A learned PD + residual controller with 100 ms of proprioceptive history tracks better than the tuned PD in every reference family and limits contact forces far better, under every held-out condition; it does not yet press to a target, wait when blocked, or keep contact without chatter. The blocked response is redefined as 'stop at the surface and wait' and measured."
+    },
+    {
+      "id": "13-dd-impedance",
+      "title": "Deep dive D6: impedance by imitation of a privileged oracle",
+      "date": "2026-11-16",
+      "milestone": 13,
+      "status": "complete",
+      "finding": "The wanted contact response is written down as a force-bounded spring on the actual error (5 N + 500 N/m x error, capped at 15 N, hold the first-contact point when blocked) and executed by a privileged oracle that validates the stop-and-wait metrics (force above the cap 2.8 N against 45.6 N for the PD, drift 2 mm against 3.2 cm). Distilled into a proprioceptive student by eight DAgger iterations (ten minutes per seed), it takes the D3 residual from 57 to 15 N above the cap on blocked targets, drift 1.9 cm to 4 mm, apparent stiffness 1440 to 527 N/m, matching the oracle's blocked composite (8.0; PD 15.9; the D5 PPO arms 14 to 17.5), three seeds; on held-out compliant surfaces the student keeps a contact stiffness near the teacher's 500 N/m where the PD keeps its own 1 to 1.4 kN/m. Cost: part of the free-space advantage (hold composite 2.33 against 1.83, torque rate 80 against 45 Nm/s). The external-torque estimate is the only cue that detects contact within 50 ms (93 to 97% of onsets). Light sliding contact at 9 to 15 N detaches on this plant for every controller. A target preview adds nothing beyond the classical feedforward. PPO under the anchored cap reward neither improves the students (two of three seeds select the student itself; test tables at parity) nor produces stop-and-wait from the D5 arm in 150 updates (blocked excess 53 to 36 N): the recipe for this behaviour is imitation."
+    },
+    {
+      "id": "14-m9-plant-v3",
+      "title": "Milestone 9: plant v3 (Panda with the Robotiq 2F-85), protocol v3 and its baselines",
+      "date": "2026-11-16",
+      "milestone": 14,
+      "status": "complete",
+      "finding": "Plant v3 (Panda with the Robotiq 2F-85 baked closed into one rigid tool body) and protocol v3 (press band 7 to 12 N, release metrics, link clearance) are established with their baselines: the re-tuned PD is two to nine times stiffer than the sphere plant's, the oracle validates the release metrics, and the task families (box pushing, pick-and-place) separate controllers. Light-contact detachment persists on fingertip pads and depends on force, slide speed and payload on both plants, so it is not the point contact. The student distilled on the sphere plant transfers unchanged to the gripper: 2.3 N above the cap on blocked targets against 40.7 for the re-tuned PD, apparent stiffness 329 N/m, in-distribution composite 2.82 against 3.06 for the privileged oracle, every block placed with a 6 N peak against 14 N."
+    },
+    {
+      "id": "15-m10-across-the-board",
+      "title": "Milestone 10: one learned controller against the best classical baseline, across the board",
+      "date": "2026-11-16",
+      "milestone": 15,
+      "status": "complete",
+      "finding": "The distilled impedance student with the free-space fix meets the pre-registered criterion on 27 of 33 family-and-group rows against the best classical controller of each family (contact families won by 30 to 60%, 5 ms latency within 3%, no divergence); all six misses are the free-motion family, where the feedforward PD tracks at 4.9 against 11.9 mrad; task success is at parity (push 31%, place 100%) with placement at 5 N against 14 N. The actor-critic residual alone is competitive but loses blocked targets and free motion; the TAM-style ideal-robot residual wins hold and pushing and doubles the blocked composite, compensating contact as model error."
+    },
+    {
+      "id": "16-checkpoint-2",
+      "title": "Checkpoint 2: a learned low-level controller for the Panda with a gripper",
+      "date": "2026-11-16",
+      "milestone": 16,
+      "status": "checkpoint (standalone summary, revised 2026-11-16 after round 2)",
+      "finding": "Standalone summary of Milestone 10, revised after round 2 (report 17): one learned controller (residual plus gain multipliers on a PD base with the nominal inverse-dynamics feedforward, trained through the plant on free space and distilled from a privileged oracle with its free space protected) is competitive or better than the best classical controller on 29 of 33 family-and-group rows on the Panda with a Robotiq 2F-85; the four misses are free motion where the nominal model is accurate (6.9 against 4.9 mrad); push success 54% against 31%, placement at 6 N against 14 N."
+    },
+    {
+      "id": "17-m10-round-2",
+      "title": "Milestone 10, round 2: the free-motion gap, a torque network, and two teachers",
+      "date": "2026-11-16",
+      "milestone": 17,
+      "status": "complete",
+      "finding": "With the nominal inverse-dynamics feedforward in its PD base and its residual trained on free space only, the distilled student meets 29 of 33 criterion rows and tracks free motion at 6.9 mrad (11.9 before) against the feedforward PD's 4.9; distilled from two teachers (ideal-robot labels referenced to the nominal law in free space, the oracle in contact) it tracks at 2.6 mrad and hold at 1.6 against 8.1, meets 28 rows with the policy-like family at 5 to 6% above the best classical as its only miss, keeps the contact families, and wins push success (52% against 31%). The 7 N teacher floor moves pressing into the band at 5 N above the cap; a direct torque network's student loses every free-space family (open-loop over its 10 ms hold) and degrades threefold under latency."
+    },
+    {
+      "id": "18-handoff",
+      "title": "Handoff: the investigation so far, what worked, the gaps, and what to revisit at scale",
+      "date": "2026-11-17",
+      "milestone": null,
+      "status": "handoff (standalone executive summary)",
+      "finding": "One learned controller, a residual-plus-gain-multiplier network on a 1 kHz PD law with the nominal inverse-dynamics feedforward, trained by backpropagation through the plant on free space and then by imitation of two privileged teachers, is competitive or better than the best classical controller on 28 of 33 pre-registered rows on the Panda with a Robotiq 2F-85; of three parameterisations by three learning routes, only the residual form trained by plant gradients and finished by imitation earned a place. The page maps the hypothesis space, the mechanisms behind what worked and what did not, the gaps (policy-like smoothness, the press band against the cap, privileged labels, three seeds and sixteen cases), and what to revisit when scaling to more data and compute."
+    }
+  ]
+}

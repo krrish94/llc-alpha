@@ -1,0 +1,65 @@
+{
+  "path": "research/reports/14-m9-plant-v3/media/hold_100x.mp4",
+  "record": "research/reports/14-m9-plant-v3/media/hold_100x.json",
+  "frames": 150,
+  "fps": 50,
+  "speed": 1.0,
+  "duration_s": 3.0,
+  "width": 1520,
+  "height": 750,
+  "resolution": [
+    1520,
+    750
+  ],
+  "view_size": [
+    480,
+    360
+  ],
+  "camera": "side",
+  "title": "Hold, case hold-test-012",
+  "plot_series": [
+    "pos_err",
+    "f_normal",
+    "tau2"
+  ],
+  "t_start": 0.0,
+  "t_end": 2.98,
+  "sample_step": 20,
+  "sample_rate_hz": 1000.0,
+  "posters": {
+    "first": "research/reports/14-m9-plant-v3/media/hold_100x-first.png",
+    "middle": "research/reports/14-m9-plant-v3/media/hold_100x-middle.png",
+    "last": "research/reports/14-m9-plant-v3/media/hold_100x-last.png"
+  },
+  "episodes": [
+    {
+      "method": "pd_shared",
+      "label": "PD, shared gains (re-tuned on plant v3)",
+      "npz": "runs/m9/episodes_baselines/hold-test-012__pd_shared.npz",
+      "sha256": "914e6c5d02331bd27fa973556ec3a5e7bd341948d72e5a57b532597c510f3c1c",
+      "joint_rmse_mrad": 7.272647301410189,
+      "peak_normal_force_n": 0.0
+    },
+    {
+      "method": "pd_shared_v2gains",
+      "label": "PD with the plant v2 gains",
+      "npz": "runs/m9/episodes_baselines/hold-test-012__pd_shared_v2gains.npz",
+      "sha256": "86967d6b851423b19433eb68f5b4fb5a8c941aa1b80dd84ae5345929e68fd409",
+      "joint_rmse_mrad": 17.199351106389134,
+      "peak_normal_force_n": 0.0
+    },
+    {
+      "method": "oracle_pd",
+      "label": "Oracle around the PD (privileged)",
+      "npz": "runs/m9/episodes_baselines/hold-test-012__oracle_pd.npz",
+      "sha256": "914e6c5d02331bd27fa973556ec3a5e7bd341948d72e5a57b532597c510f3c1c",
+      "joint_rmse_mrad": 7.272647301410189,
+      "peak_normal_force_n": 0.0
+    }
+  ],
+  "reference": "gray sphere: commanded tool position, q_ref through llc.sim.nominal.NominalModel",
+  "trace": "measured tool path over the last 0.5 s, gray (old) to method color (new)",
+  "metrics": "joint RMSE over all joints and samples from t = 0 to the displayed time (mrad); peak normal force so far (N)",
+  "scene": "llc/sim/assets/panda_2f85_0800.xml",
+  "render_seconds": 3.46
+}

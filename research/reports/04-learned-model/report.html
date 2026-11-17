@@ -1,0 +1,121 @@
+<h2>Question</h2>
+<p>Can a dynamics model learned from plant data replace the known rigid-body model as the training medium? Three separate claims are tested: (1) prediction accuracy at several horizons and regimes, (2) usefulness of the model's gradients, measured against the known model, and (3) closed-loop performance in the plant of controllers trained through the learned model, compared with the same parameterizations trained through the known model (Milestone 2) and with the conventional baselines.</p>
+
+<h2>Setup</h2>
+<p>Data: closed-loop episodes in the plant under PD control with shared gains scaled by a random factor (0.3 to 1.5), filtered exploration torque noise (0 to 10% of the torque limits) and references of all six regimes at random speed scales (24 training and 6 validation episodes per regime, 1 kHz). Two model classes at the 2.5 ms model step: a black-box network predicting the joint acceleration and the contact force magnitude from (q, qd, tau), and a residual network added to the known free-space rigid-body model. Both are trained for 15000 steps on 270k transitions. Controllers are then trained through the frozen residual model (all three parameterizations) and through the black-box model (learned gains) with the protocol of ADR 0003 and evaluated in the plant on the test split.</p>
+
+<h2>Model validation</h2>
+<p>Open-loop prediction error is measured by replaying recorded torques from 20 start points per validation episode. Gradient agreement compares the sensitivity of the joint velocity 100 ms ahead to a held torque perturbation between the learned model and the known rigid-body model at free-space points (where the known model is exact).</p><table>
+<caption>Open-loop prediction error on held-out validation episodes (recorded torques replayed; mean over 20 starts per episode).</caption>
+<thead>
+<tr><th>Model</th><th>Regime</th><th class="num">RMSE after 1 step (rad)</th><th class="num">after 100 ms (rad)</th><th class="num">after 1 s (rad)</th></tr>
+</thead>
+<tbody>
+<tr><td>blackbox</td><td>Hold</td><td class="num">5.711e-06</td><td class="num">0.002345</td><td class="num">0.1178</td></tr>
+<tr><td>blackbox</td><td>Smooth tracking</td><td class="num">0.0001739</td><td class="num">0.006819</td><td class="num">0.18</td></tr>
+<tr><td>blackbox</td><td>Policy-like targets (20 Hz hold)</td><td class="num">0.0002102</td><td class="num">0.008535</td><td class="num">0.2339</td></tr>
+<tr><td>blackbox</td><td>Step targets</td><td class="num">0.0002952</td><td class="num">0.0139</td><td class="num">0.2537</td></tr>
+<tr><td>blackbox</td><td>Sustained contact</td><td class="num">4.39e-05</td><td class="num">0.002001</td><td class="num">0.03236</td></tr>
+<tr><td>blackbox</td><td>Contact transitions</td><td class="num">6.156e-05</td><td class="num">0.003559</td><td class="num">0.5824</td></tr>
+<tr><td>residual</td><td>Hold</td><td class="num">5.641e-06</td><td class="num">0.002371</td><td class="num">0.1366</td></tr>
+<tr><td>residual</td><td>Smooth tracking</td><td class="num">0.0001744</td><td class="num">0.006734</td><td class="num">0.2708</td></tr>
+<tr><td>residual</td><td>Policy-like targets (20 Hz hold)</td><td class="num">0.0002105</td><td class="num">0.008278</td><td class="num">0.3576</td></tr>
+<tr><td>residual</td><td>Step targets</td><td class="num">0.0002941</td><td class="num">0.009547</td><td class="num">0.3975</td></tr>
+<tr><td>residual</td><td>Sustained contact</td><td class="num">4.363e-05</td><td class="num">0.00184</td><td class="num">0.02895</td></tr>
+<tr><td>residual</td><td>Contact transitions</td><td class="num">6.19e-05</td><td class="num">0.004459</td><td class="num">1.076</td></tr>
+</tbody>
+</table><table>
+<caption>Gradient usefulness: sensitivity of the joint velocity after 100 ms to a held torque perturbation, learned model against the known rigid-body model, at free-space validation points.</caption>
+<thead>
+<tr><th>Model</th><th class="num">Points</th><th class="num">Cosine similarity (mean)</th><th class="num">Cosine (min)</th><th class="num">Relative norm error</th><th class="num">Training transitions</th><th class="num">Validation acceleration RMSE (rad/s^2)</th></tr>
+</thead>
+<tbody>
+<tr><td>blackbox</td><td class="num">64</td><td class="num">0.962</td><td class="num">0.617</td><td class="num">0.374</td><td class="num">270483</td><td class="num">3.71</td></tr>
+<tr><td>residual</td><td class="num">64</td><td class="num">0.969</td><td class="num">0.807</td><td class="num">0.343</td><td class="num">270483</td><td class="num">3.33</td></tr>
+</tbody>
+</table>
+
+<h2>Closed-loop results in the plant</h2>
+<p>Controllers trained through the residual learned model (all three parameterizations) and through the black-box model (learned gains), against the same parameterizations trained through the known model in Milestone 2 (protocol v1 in both cases) and the conventional baselines; 16 test cases per regime, one seed per run.</p><table>
+<caption>Composite per regime on the test split (16 cases per regime) for controllers trained through the learned model and through the known model.</caption>
+<thead>
+<tr><th>Controller (training route)</th><th>Seed</th><th class="num">Hold</th><th class="num">Smooth tracking</th><th class="num">Policy-like targets (20 Hz hold)</th><th class="num">Step targets</th><th class="num">Sustained contact</th><th class="num">Contact transitions</th><th class="num">Diverged</th></tr>
+</thead>
+<tbody>
+<tr><td>learned_gains (learned model, residual)</td><td>0</td><td class="num">0.88</td><td class="num">0.28</td><td class="num">0.94</td><td class="num">2.49</td><td class="num">2.43</td><td class="num">2.36</td><td class="num">0</td></tr>
+<tr><td>pd_residual (learned model, residual)</td><td>0</td><td class="num">0.44</td><td class="num">0.17</td><td class="num">1.22</td><td class="num">1.98</td><td class="num">2.15</td><td class="num">2.29</td><td class="num">0</td></tr>
+<tr><td>neural_torque (learned model, residual)</td><td>0</td><td class="num">1.63</td><td class="num">0.86</td><td class="num">0.74</td><td class="num">2.40</td><td class="num">2.91</td><td class="num">2.61</td><td class="num">0</td></tr>
+<tr><td>learned_gains (learned model, black-box)</td><td>0</td><td class="num">0.82</td><td class="num">0.25</td><td class="num">0.93</td><td class="num">2.32</td><td class="num">2.39</td><td class="num">2.30</td><td class="num">0</td></tr>
+<tr><td>learned_gains (known model)</td><td>0</td><td class="num">1.06</td><td class="num">0.32</td><td class="num">0.74</td><td class="num">2.47</td><td class="num">2.54</td><td class="num">2.35</td><td class="num">0</td></tr>
+<tr><td>pd_residual (known model)</td><td>0</td><td class="num">0.43</td><td class="num">0.17</td><td class="num">1.21</td><td class="num">1.98</td><td class="num">2.05</td><td class="num">2.29</td><td class="num">0</td></tr>
+<tr><td>neural_torque (known model)</td><td>0</td><td class="num">0.93</td><td class="num">0.43</td><td class="num">0.97</td><td class="num">2.20</td><td class="num">3.87</td><td class="num">2.12</td><td class="num">0</td></tr>
+<tr><td>PD, shared gains</td><td>—</td><td class="num">0.51</td><td class="num">0.18</td><td class="num">1.21</td><td class="num">2.00</td><td class="num">1.98</td><td class="num">2.30</td><td class="num">0</td></tr>
+<tr><td>PD, gains tuned per regime</td><td>—</td><td class="num">0.22</td><td class="num">0.09</td><td class="num">0.56</td><td class="num">1.88</td><td class="num">1.70</td><td class="num">1.38</td><td class="num">0</td></tr>
+<tr><td>Computed torque (privileged)</td><td>—</td><td class="num">0.28</td><td class="num">0.05</td><td class="num">2.04</td><td class="num">12.78</td><td class="num">7.29</td><td class="num">5.09</td><td class="num">0</td></tr>
+</tbody>
+</table><table class="wide">
+<caption>Primary metrics (mean over cases; paired difference against PD with shared gains with 95% bootstrap interval).</caption>
+<thead>
+<tr><th>Regime</th><th>Metric</th><th class="num">PD, shared gains</th><th class="num">PD, gains tuned per regime</th><th class="num">Computed torque (privileged)</th><th class="num">Learned PD gains (learned model, residual)</th><th class="num">PD + learned residual (learned model, residual)</th><th class="num">Neural torque (learned model, residual)</th><th class="num">Learned PD gains (learned model, black-box)</th><th class="num">Learned PD gains (known model)</th><th class="num">PD + learned residual (known model)</th><th class="num">Neural torque (known model)</th></tr>
+</thead>
+<tbody>
+<tr><td>Hold</td><td>Position RMSE (rad)</td><td class="num">0.000574</td><td class="num">0.000256 (-0.00032*)</td><td class="num">0.000298 (-0.00028*)</td><td class="num">0.00108 (0.00051*)</td><td class="num">0.000639 (6.5e-05)</td><td class="num">0.00323 (0.0027*)</td><td class="num">0.000969 (0.0004*)</td><td class="num">0.00121 (0.00063*)</td><td class="num">0.000557 (-1.8e-05)</td><td class="num">0.00178 (0.0012*)</td></tr>
+<tr><td>Hold</td><td>Peak deflection under 10 N pulse (m)</td><td class="num">0.00443</td><td class="num">0.00177 (-0.0027*)</td><td class="num">0.00232 (-0.0021*)</td><td class="num">0.00764 (0.0032*)</td><td class="num">0.0034 (-0.001*)</td><td class="num">0.00371 (-0.00072*)</td><td class="num">0.00712 (0.0027*)</td><td class="num">0.00932 (0.0049*)</td><td class="num">0.00347 (-0.00096*)</td><td class="num">0.00553 (0.0011*)</td></tr>
+<tr><td>Smooth tracking</td><td>Position RMSE (rad)</td><td class="num">0.00266</td><td class="num">0.000923 (-0.0017*)</td><td class="num">0.000187 (-0.0025*)</td><td class="num">0.00458 (0.0019*)</td><td class="num">0.00171 (-0.00096*)</td><td class="num">0.00489 (0.0022*)</td><td class="num">0.00392 (0.0013*)</td><td class="num">0.00528 (0.0026*)</td><td class="num">0.00171 (-0.00095*)</td><td class="num">0.00344 (0.00078*)</td></tr>
+<tr><td>Smooth tracking</td><td>Torque rate RMS (Nm/s)</td><td class="num">48.4</td><td class="num">41.6 (-6.8*)</td><td class="num">41.7 (-6.7*)</td><td class="num">55.5 (7.1*)</td><td class="num">83.9 (36*)</td><td class="num">612 (5.6e+02*)</td><td class="num">56.2 (7.8*)</td><td class="num">56 (7.7*)</td><td class="num">81 (33*)</td><td class="num">263 (2.1e+02*)</td></tr>
+<tr><td>Policy-like targets (20 Hz hold)</td><td>Position RMSE (rad)</td><td class="num">0.0145</td><td class="num">0.0156 (0.0011)</td><td class="num">0.00623 (-0.0083*)</td><td class="num">0.0113 (-0.0032*)</td><td class="num">0.0145 (-6.2e-06)</td><td class="num">0.0116 (-0.0029*)</td><td class="num">0.0109 (-0.0037*)</td><td class="num">0.0112 (-0.0033*)</td><td class="num">0.0142 (-0.0003*)</td><td class="num">0.0293 (0.015*)</td></tr>
+<tr><td>Policy-like targets (20 Hz hold)</td><td>Torque rate RMS (Nm/s)</td><td class="num">2.31e+03</td><td class="num">619 (-1.7e+03*)</td><td class="num">4.79e+03 (2.5e+03*)</td><td class="num">1.79e+03 (-5.2e+02*)</td><td class="num">2.32e+03 (8.5*)</td><td class="num">1.27e+03 (-1e+03*)</td><td class="num">1.77e+03 (-5.4e+02*)</td><td class="num">1.29e+03 (-1e+03*)</td><td class="num">2.32e+03 (6.4*)</td><td class="num">957 (-1.4e+03*)</td></tr>
+<tr><td>Step targets</td><td>Position RMSE (rad)</td><td class="num">0.0303</td><td class="num">0.03 (-0.00027*)</td><td class="num">0.362 (0.33*)</td><td class="num">0.0304 (0.00012)</td><td class="num">0.0301 (-0.00016*)</td><td class="num">0.0325 (0.0022*)</td><td class="num">0.03 (-0.0003*)</td><td class="num">0.0304 (0.00016)</td><td class="num">0.0301 (-0.00017*)</td><td class="num">0.037 (0.0067*)</td></tr>
+<tr><td>Step targets</td><td>Settling time after step (s)</td><td class="num">0.157</td><td class="num">0.124 (-0.033*)</td><td class="num">0.733 (0.58*)</td><td class="num">0.268 (0.11*)</td><td class="num">0.146 (-0.011*)</td><td class="num">0.194 (0.037*)</td><td class="num">0.22 (0.063*)</td><td class="num">0.263 (0.11*)</td><td class="num">0.145 (-0.012*)</td><td class="num">0.269 (0.11*)</td></tr>
+<tr><td>Step targets</td><td>Torque rate RMS (Nm/s)</td><td class="num">2.02e+03</td><td class="num">2.07e+03 (50*)</td><td class="num">2.77e+03 (7.5e+02*)</td><td class="num">1.95e+03 (-74*)</td><td class="num">2.06e+03 (40*)</td><td class="num">2.22e+03 (2e+02*)</td><td class="num">1.99e+03 (-29*)</td><td class="num">1.85e+03 (-1.7e+02*)</td><td class="num">2.05e+03 (30*)</td><td class="num">1.4e+03 (-6.2e+02*)</td></tr>
+<tr><td>Sustained contact</td><td>Tangential tool error during slide (m)</td><td class="num">0.00712</td><td class="num">0.00576 (-0.0014*)</td><td class="num">0.0226 (0.016*)</td><td class="num">0.00716 (4.3e-05)</td><td class="num">0.00702 (-9.9e-05*)</td><td class="num">0.00884 (0.0017*)</td><td class="num">0.00802 (0.0009*)</td><td class="num">0.00884 (0.0017*)</td><td class="num">0.00691 (-0.00021*)</td><td class="num">0.00772 (0.0006*)</td></tr>
+<tr><td>Sustained contact</td><td>Normal force std in contact phase (N)</td><td class="num">6.25</td><td class="num">5.55 (-0.69*)</td><td class="num">24.6 (18*)</td><td class="num">6.79 (0.55)</td><td class="num">7.18 (0.93*)</td><td class="num">6.08 (-0.17)</td><td class="num">7.35 (1.1*)</td><td class="num">7.22 (0.97*)</td><td class="num">6.72 (0.48*)</td><td class="num">9.22 (3*)</td></tr>
+<tr><td>Sustained contact</td><td>Contact losses of 5 ms or more during contact phase (-)</td><td class="num">0.125</td><td class="num">0 (-0.12)</td><td class="num">1.44 (1.3*)</td><td class="num">7 (6.9*)</td><td class="num">0 (-0.12)</td><td class="num">4.62 (4.5*)</td><td class="num">2.19 (2.1*)</td><td class="num">4.12 (4*)</td><td class="num">0 (-0.12)</td><td class="num">23.8 (24*)</td></tr>
+<tr><td>Contact transitions</td><td>Peak normal force (N)</td><td class="num">91.8</td><td class="num">31.7 (-60*)</td><td class="num">179 (87*)</td><td class="num">87.6 (-4.2)</td><td class="num">89.9 (-2*)</td><td class="num">70.7 (-21*)</td><td class="num">87.7 (-4.2)</td><td class="num">88.3 (-3.6)</td><td class="num">89.9 (-1.9*)</td><td class="num">67.7 (-24*)</td></tr>
+<tr><td>Contact transitions</td><td>Impulse in first 100 ms of contact (N s)</td><td class="num">6.46</td><td class="num">0.852 (-5.6*)</td><td class="num">7.65 (1.2*)</td><td class="num">4.44 (-2*)</td><td class="num">6.31 (-0.15*)</td><td class="num">3.49 (-3*)</td><td class="num">4.89 (-1.6*)</td><td class="num">4.57 (-1.9*)</td><td class="num">6.26 (-0.19*)</td><td class="num">4.16 (-2.3*)</td></tr>
+<tr><td>Contact transitions</td><td>Tracking recovery after release (s)</td><td class="num">0.0428</td><td class="num">0.0578 (0.015*)</td><td class="num">0.103 (0.061*)</td><td class="num">0.0517 (0.0089*)</td><td class="num">0.0402 (-0.0026*)</td><td class="num">0.105 (0.062*)</td><td class="num">0.0517 (0.0089*)</td><td class="num">0.0506 (0.0078*)</td><td class="num">0.0413 (-0.0015*)</td><td class="num">0.0651 (0.022*)</td></tr>
+<tr><td>Contact transitions</td><td>Position RMSE (rad)</td><td class="num">0.0061</td><td class="num">0.00876 (0.0027*)</td><td class="num">0.0174 (0.011*)</td><td class="num">0.00637 (0.00027*)</td><td class="num">0.00593 (-0.00017*)</td><td class="num">0.0102 (0.0041*)</td><td class="num">0.00615 (5.2e-05*)</td><td class="num">0.0061 (-2.9e-06)</td><td class="num">0.00596 (-0.00014*)</td><td class="num">0.008 (0.0019*)</td></tr>
+</tbody>
+</table><figure class="widget compare" id="fig-compare" data-widget="compare" data-src="data/compare.json" data-regime="smooth" data-metric="pos_rmse">
+<div class="widget-body">
+<p class="selection">Selection: Smooth tracking, Position RMSE (rad); n = 16 cases. Mean with 95% bootstrap CI (1000 resamples); difference vs PD, shared gains is paired by case, failed cases dropped from the pair.</p>
+<table class="compare-table">
+<thead>
+<tr><th>Method</th><th class="num">Mean</th><th class="num">95% CI</th><th class="num">n</th><th class="num">Δ vs reference</th><th class="num">95% CI (paired)</th><th class="num">Pairs</th></tr>
+</thead>
+<tbody>
+<tr><td>PD, shared gains</td><td class="num">0.002662</td><td class="num">[0.001926, 0.003509]</td><td class="num">16</td><td class="num">reference</td><td class="num">—</td><td class="num">—</td></tr>
+<tr><td>PD, gains tuned per regime</td><td class="num">0.0009226</td><td class="num">[0.0006809, 0.00119]</td><td class="num">16</td><td class="num">-0.001739</td><td class="num">[-0.002329, -0.001216]</td><td class="num">16</td></tr>
+<tr><td>Computed torque (privileged)</td><td class="num">0.0001869</td><td class="num">[0.0001623, 0.0002135]</td><td class="num">16</td><td class="num">-0.002475</td><td class="num">[-0.003328, -0.001744]</td><td class="num">16</td></tr>
+<tr><td>Learned PD gains (learned model, residual)</td><td class="num">0.004576</td><td class="num">[0.003107, 0.006336]</td><td class="num">16</td><td class="num">0.001913</td><td class="num">[0.001187, 0.002726]</td><td class="num">16</td></tr>
+<tr><td>PD + learned residual (learned model, residual)</td><td class="num">0.001705</td><td class="num">[0.001207, 0.002292]</td><td class="num">16</td><td class="num">-0.0009567</td><td class="num">[-0.001225, -0.0006721]</td><td class="num">16</td></tr>
+<tr><td>Neural torque (learned model, residual)</td><td class="num">0.004886</td><td class="num">[0.0043, 0.005569]</td><td class="num">16</td><td class="num">0.002224</td><td class="num">[0.001954, 0.002468]</td><td class="num">16</td></tr>
+<tr><td>Learned PD gains (learned model, black-box)</td><td class="num">0.003921</td><td class="num">[0.002597, 0.005347]</td><td class="num">16</td><td class="num">0.001259</td><td class="num">[0.000708, 0.001933]</td><td class="num">16</td></tr>
+<tr><td>Learned PD gains (known model)</td><td class="num">0.005276</td><td class="num">[0.003487, 0.007385]</td><td class="num">16</td><td class="num">0.002614</td><td class="num">[0.001521, 0.003818]</td><td class="num">16</td></tr>
+<tr><td>PD + learned residual (known model)</td><td class="num">0.001708</td><td class="num">[0.001149, 0.002342]</td><td class="num">16</td><td class="num">-0.000954</td><td class="num">[-0.001187, -0.0007309]</td><td class="num">16</td></tr>
+<tr><td>Neural torque (known model)</td><td class="num">0.00344</td><td class="num">[0.00271, 0.004296]</td><td class="num">16</td><td class="num">0.0007782</td><td class="num">[0.0005129, 0.001027]</td><td class="num">16</td></tr>
+</tbody>
+</table>
+</div>
+<figcaption>Per-case metric values on the test split for both training routes. <a class="source" href="data/compare.json">Data (JSON)</a></figcaption>
+</figure>
+
+<h2>Findings</h2>
+<ol>
+<li><strong>Prediction: both learned models are accurate at the control horizon and drift open loop over a second.</strong> After one 2.5 ms step the position error is below 0.3 mrad in every regime; after 100 ms it is 2 to 14 mrad (largest for step targets, smallest in contact where the tool is held by the surface); after 1 s of open-loop replay it reaches 0.03 to 0.6 rad (black-box) and up to 1.1 rad for transitions (residual). The plant is open-loop unstable under gravity, so the 1 s figure measures drift accumulation, not usefulness for closed-loop training, where the loop corrects the state every 10 ms.</li>
+<li><strong>Gradients agree with the known model.</strong> The sensitivity of the joint velocity 100 ms ahead to a torque perturbation has a mean cosine similarity of 0.96 (black-box) and 0.97 (residual) with the known model's, with minimum 0.62 and 0.81 over 64 free-space points, and a relative norm error of 0.37 and 0.34. The residual model, which starts from the exact free-space dynamics, has the more reliable gradients.</li>
+<li><strong>Closed loop: training through the learned model gives the same controllers as training through the known model.</strong> Mean composites over regimes: learned gains 1.56 (residual model) and 1.50 (black-box) against 1.58 (known model); PD + residual 1.37 against 1.35; neural torque 1.86 against 1.75; PD with shared gains 1.37. Per metric the routes agree closely (for example smooth-tracking position RMSE 1.7 mrad for PD + residual on either route; policy-like-target torque rate 1787 against 1291 Nm/s for learned gains). The learned model is therefore an adequate substitute for the known model as a training medium under this protocol, and it inherits the protocol v1 shortfall of Milestone 2 exactly.</li>
+<li><strong>Cost: the black-box model is three times cheaper to train through</strong> (6 min for 320 iterations against 21 min for the residual model and 19 to 25 min for the rigid-body model), because one network evaluation replaces the recursive Newton-Euler pass, and it produced the best learned-gains controller of the three routes (composite 1.50; hold pulse deflection 7.1 mm against 9.3 mm for the known route).</li>
+<li><strong>Contact remains the weak point of every model.</strong> Learned gains trained through the residual model lose contact 7 times per sustained-contact case in the plant (4 for the known route, 0 for PD); neural torque trained through the learned model chatters less than through the known model (4.6 against 23.8 losses) but tracks worse. None of the training media reproduce the plant's stick-slip.</li>
+</ol>
+
+<h2>Caveats and failures</h2>
+<ul>
+<li>One seed per route and parameterization; the differences between routes (for example 1.50 against 1.58 for learned gains) are within what a seed could change and are not claimed as effects.</li>
+<li>The data were collected under PD control with exploration noise; the coverage audit of states visited by the trained controllers was not run in this pass. The agreement between routes is indirect evidence that coverage was adequate.</li>
+<li>The learned models predict the contact force magnitude only, so the force-rate and force terms of the training loss act on a scalar; the tool-contact direction is not modelled.</li>
+<li>All results are under training protocol v1 (no disturbance pulses in training), so the absolute performance carries the Milestone 2 diagnosis; the comparison between routes is unaffected because both routes used the same protocol.</li>
+</ul>
+
+<h2>Next steps</h2>
+<p>Repeat the learned-model route under protocol v2 once the Milestone 2 v2 runs confirm the protocol, add seeds, and run the coverage audit (distance of controller-visited states to the training data and model error there). A second data-aggregation round under the trained controllers is prepared but was not run.</p>

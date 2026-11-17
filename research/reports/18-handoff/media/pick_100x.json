@@ -1,0 +1,57 @@
+{
+  "path": "research/reports/18-handoff/media/pick_100x.mp4",
+  "record": "research/reports/18-handoff/media/pick_100x.json",
+  "frames": 300,
+  "fps": 50,
+  "speed": 1.0,
+  "duration_s": 6.0,
+  "width": 1024,
+  "height": 750,
+  "resolution": [
+    1024,
+    750
+  ],
+  "view_size": [
+    480,
+    360
+  ],
+  "camera": "detail",
+  "title": "Pick-and-place: placing a held block, case pick-test-013",
+  "plot_series": [
+    "pos_err",
+    "f_object_env",
+    "tau2"
+  ],
+  "t_start": 0.0,
+  "t_end": 5.98,
+  "sample_step": 20,
+  "sample_rate_hz": 1000.0,
+  "posters": {
+    "first": "research/reports/18-handoff/media/pick_100x-first.png",
+    "middle": "research/reports/18-handoff/media/pick_100x-middle.png",
+    "last": "research/reports/18-handoff/media/pick_100x-last.png"
+  },
+  "episodes": [
+    {
+      "method": "pd_feedforward",
+      "label": "PD, tracking-tuned, with feedforward",
+      "npz": "runs/m10r2/episodes_handoff/tasks__pick-test-013__pd_feedforward.npz",
+      "sha256": "cc01349641576947b0f622ea15fcb63e5516f002607eb875642868bc087c5769",
+      "joint_rmse_mrad": 10.323942717764442,
+      "peak_normal_force_n": 0.0
+    },
+    {
+      "method": "distill_two",
+      "label": "Two-teacher student (seed 0)",
+      "npz": "runs/m10r2/episodes_handoff/tasks__pick-test-013__distill_two-s0.npz",
+      "sha256": "cdb8de61b2c0d18f9294da50f6434753ba17b464a875a42d76146d6b45ec9678",
+      "joint_rmse_mrad": 2.836675872990088,
+      "peak_normal_force_n": 0.0
+    }
+  ],
+  "reference": "gray sphere: commanded tool position, q_ref through llc.sim.nominal.NominalModel",
+  "trace": "measured tool path over the last 0.5 s, gray (old) to method color (new)",
+  "metrics": "joint RMSE over all joints and samples from t = 0 to the displayed time (mrad); peak normal force so far (N)",
+  "scene": "llc/sim/assets/panda_2f85_0450_task_pick.xml",
+  "render_seconds": 3.64
+}

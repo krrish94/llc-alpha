@@ -1,0 +1,73 @@
+{
+  "path": "research/reports/13-dd-impedance/media/contact2_025x.mp4",
+  "record": "research/reports/13-dd-impedance/media/contact2_025x.json",
+  "frames": 601,
+  "fps": 50,
+  "speed": 0.25,
+  "duration_s": 12.02,
+  "width": 2016,
+  "height": 750,
+  "resolution": [
+    2016,
+    750
+  ],
+  "view_size": [
+    480,
+    360
+  ],
+  "camera": "detail",
+  "title": "Contact, case contact2-test-000",
+  "plot_series": [
+    "pos_err",
+    "f_normal",
+    "tau2"
+  ],
+  "t_start": 0.0,
+  "t_end": 3.0,
+  "sample_step": 5,
+  "sample_rate_hz": 1000.0,
+  "posters": {
+    "first": "research/reports/13-dd-impedance/media/contact2_025x-first.png",
+    "middle": "research/reports/13-dd-impedance/media/contact2_025x-middle.png",
+    "last": "research/reports/13-dd-impedance/media/contact2_025x-last.png"
+  },
+  "episodes": [
+    {
+      "method": "pd_shared",
+      "label": "PD, shared gains",
+      "npz": "runs/d7/episodes_stage1/contact2-test-000__pd_shared.npz",
+      "sha256": "8dee51a2b901259b8d9df27bae17bbc520d382c05f8bbf13d3c415fe5f53f772",
+      "joint_rmse_mrad": 20.057909917414666,
+      "peak_normal_force_n": 358.43205907707124
+    },
+    {
+      "method": "oracle_pd",
+      "label": "Oracle around the PD (privileged)",
+      "npz": "runs/d7/episodes_stage1/contact2-test-000__oracle_pd.npz",
+      "sha256": "06985171d08948f6e77928158a8e9b67041b3cb6eb721ea4082a2b0ad56fc166",
+      "joint_rmse_mrad": 8.325442310935022,
+      "peak_normal_force_n": 358.43205907707124
+    },
+    {
+      "method": "pd_residual_acmed_s02_lowrate",
+      "label": "PD + residual (D3 warm start)",
+      "npz": "runs/d7/episodes_stage1/contact2-test-000__pd_residual_acmed_s02_lowrate-s0.npz",
+      "sha256": "4b6ac394641c54d4905246e0969a4c0f1fe1c6bbe98e794abe22940b5e08ed61",
+      "joint_rmse_mrad": 8.725170533300407,
+      "peak_normal_force_n": 113.56525701791153
+    },
+    {
+      "method": "distill_gain_ext",
+      "label": "Distilled student",
+      "npz": "runs/d7/episodes_stage1/contact2-test-000__distill_gain_ext-s0.npz",
+      "sha256": "29d5c56abe2a80a64c18b98a7498f8922ba9b5a5e420cd92092ff395b939667f",
+      "joint_rmse_mrad": 8.75140442049202,
+      "peak_normal_force_n": 124.71384873739552
+    }
+  ],
+  "reference": "gray sphere: commanded tool position, q_ref through llc.sim.nominal.NominalModel",
+  "trace": "measured tool path over the last 0.5 s, gray (old) to method color (new)",
+  "metrics": "joint RMSE over all joints and samples from t = 0 to the displayed time (mrad); peak normal force so far (N)",
+  "scene": "llc/sim/assets/panda_scene.xml",
+  "render_seconds": 10.83
+}

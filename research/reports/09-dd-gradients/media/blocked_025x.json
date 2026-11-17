@@ -1,0 +1,73 @@
+{
+  "path": "research/reports/09-dd-gradients/media/blocked_025x.mp4",
+  "record": "research/reports/09-dd-gradients/media/blocked_025x.json",
+  "frames": 1043,
+  "fps": 50,
+  "speed": 0.25,
+  "duration_s": 20.86,
+  "width": 2016,
+  "height": 750,
+  "resolution": [
+    2016,
+    750
+  ],
+  "view_size": [
+    480,
+    360
+  ],
+  "camera": "detail",
+  "title": "Blocked reference, case blocked-test-013",
+  "plot_series": [
+    "pos_err",
+    "f_normal",
+    "tau2"
+  ],
+  "t_start": 0.0,
+  "t_end": 5.21,
+  "sample_step": 5,
+  "sample_rate_hz": 1000.0,
+  "posters": {
+    "first": "research/reports/09-dd-gradients/media/blocked_025x-first.png",
+    "middle": "research/reports/09-dd-gradients/media/blocked_025x-middle.png",
+    "last": "research/reports/09-dd-gradients/media/blocked_025x-last.png"
+  },
+  "episodes": [
+    {
+      "method": "pd_shared",
+      "label": "PD, shared gains (v2)",
+      "npz": "runs/d4/episodes/blocked-test-013__pd_shared.npz",
+      "sha256": "263aef578f6e3456239c6c1fd3fffb7571d55ed2e145f30c6b636e4c044a0c57",
+      "joint_rmse_mrad": 42.7191063113388,
+      "peak_normal_force_n": 132.93621036619163
+    },
+    {
+      "method": "pd_shared_v1",
+      "label": "PD, shared gains (v1)",
+      "npz": "runs/d4/episodes/blocked-test-013__pd_shared_v1.npz",
+      "sha256": "ea581c4613437f47fd143920579066e305658d57b2454081afa64bd74e02ab76",
+      "joint_rmse_mrad": 22.645899547450135,
+      "peak_normal_force_n": 210.172409194728
+    },
+    {
+      "method": "pd_residual_acmed",
+      "label": "PD + residual, AC, first reward",
+      "npz": "runs/d4/episodes/blocked-test-013__pd_residual_acmed-s0.npz",
+      "sha256": "e01cbed93ed021def5c55458ed3adab506b8a206301fd3ffc9eab80efa85c7d5",
+      "joint_rmse_mrad": 29.050236904721586,
+      "peak_normal_force_n": 137.80946770597043
+    },
+    {
+      "method": "pd_residual_acmed_s02_lowrate",
+      "label": "PD + residual, AC, rate-light, 20 mrad kernel",
+      "npz": "runs/d4/episodes/blocked-test-013__pd_residual_acmed_s02_lowrate-s0.npz",
+      "sha256": "a7839700c506fde2841d0a39b4fe3f9fe85696deb41abf6f0e32ed88bdc1fafc",
+      "joint_rmse_mrad": 24.19151872294317,
+      "peak_normal_force_n": 122.84378574643596
+    }
+  ],
+  "reference": "gray sphere: commanded tool position, q_ref through llc.sim.nominal.NominalModel",
+  "trace": "measured tool path over the last 0.5 s, gray (old) to method color (new)",
+  "metrics": "joint RMSE over all joints and samples from t = 0 to the displayed time (mrad); peak normal force so far (N)",
+  "scene": "llc/sim/assets/panda_scene.xml",
+  "render_seconds": 20.1
+}

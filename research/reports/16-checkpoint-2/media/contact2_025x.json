@@ -1,0 +1,73 @@
+{
+  "path": "research/reports/16-checkpoint-2/media/contact2_025x.mp4",
+  "record": "research/reports/16-checkpoint-2/media/contact2_025x.json",
+  "frames": 845,
+  "fps": 50,
+  "speed": 0.25,
+  "duration_s": 16.9,
+  "width": 2016,
+  "height": 750,
+  "resolution": [
+    2016,
+    750
+  ],
+  "view_size": [
+    480,
+    360
+  ],
+  "camera": "detail",
+  "title": "Contact, case contact2-test-001",
+  "plot_series": [
+    "pos_err",
+    "f_normal",
+    "tau2"
+  ],
+  "t_start": 0.0,
+  "t_end": 4.22,
+  "sample_step": 5,
+  "sample_rate_hz": 1000.0,
+  "posters": {
+    "first": "research/reports/16-checkpoint-2/media/contact2_025x-first.png",
+    "middle": "research/reports/16-checkpoint-2/media/contact2_025x-middle.png",
+    "last": "research/reports/16-checkpoint-2/media/contact2_025x-last.png"
+  },
+  "episodes": [
+    {
+      "method": "pd_shared",
+      "label": "PD, tracking-tuned",
+      "npz": "runs/m10r2/episodes_test/contact2-test-001__pd_shared.npz",
+      "sha256": "001ed33d80d5756e432e5a2b7dc7210d663b0d45d7950d10fafcb06c787ed179",
+      "joint_rmse_mrad": 9.218337892406145,
+      "peak_normal_force_n": 323.7251191187076
+    },
+    {
+      "method": "pd_feedforward",
+      "label": "PD + inverse-dynamics feedforward",
+      "npz": "runs/m10r2/episodes_test/contact2-test-001__pd_feedforward.npz",
+      "sha256": "acee43e1148f0b0df2fe5e7c0e5843b32cb7fbc1b1ef6096308e5a1ae966bccc",
+      "joint_rmse_mrad": 9.25604831003985,
+      "peak_normal_force_n": 387.11335281326984
+    },
+    {
+      "method": "oracle_pd",
+      "label": "Oracle around the PD (privileged)",
+      "npz": "runs/m10r2/episodes_test/contact2-test-001__oracle_pd.npz",
+      "sha256": "7b3e0a064c1339cfa4e49ee4e30d1bd3fc29b42f9bed0dd3ae6e74cf4af31ae9",
+      "joint_rmse_mrad": 9.297476293055169,
+      "peak_normal_force_n": 319.25300602378144
+    },
+    {
+      "method": "distill_two",
+      "label": "Learned controller (two-teacher student)",
+      "npz": "runs/m10r2/episodes_test/contact2-test-001__distill_two-s0.npz",
+      "sha256": "5c50ef5563067bd32c2be3f1068eaa042d4146cbd70dcd0cd587f61e85698aca",
+      "joint_rmse_mrad": 11.277547804318726,
+      "peak_normal_force_n": 371.7645475640976
+    }
+  ],
+  "reference": "gray sphere: commanded tool position, q_ref through llc.sim.nominal.NominalModel",
+  "trace": "measured tool path over the last 0.5 s, gray (old) to method color (new)",
+  "metrics": "joint RMSE over all joints and samples from t = 0 to the displayed time (mrad); peak normal force so far (N)",
+  "scene": "llc/sim/assets/panda_2f85_0800.xml",
+  "render_seconds": 19.69
+}

@@ -1,0 +1,73 @@
+{
+  "path": "research/reports/09-dd-gradients/media/contact2_025x.mp4",
+  "record": "research/reports/09-dd-gradients/media/contact2_025x.json",
+  "frames": 478,
+  "fps": 50,
+  "speed": 0.25,
+  "duration_s": 9.56,
+  "width": 2016,
+  "height": 750,
+  "resolution": [
+    2016,
+    750
+  ],
+  "view_size": [
+    480,
+    360
+  ],
+  "camera": "detail",
+  "title": "Contact, case contact2-test-002",
+  "plot_series": [
+    "pos_err",
+    "f_normal",
+    "tau2"
+  ],
+  "t_start": 0.0,
+  "t_end": 2.3850000000000002,
+  "sample_step": 5,
+  "sample_rate_hz": 1000.0,
+  "posters": {
+    "first": "research/reports/09-dd-gradients/media/contact2_025x-first.png",
+    "middle": "research/reports/09-dd-gradients/media/contact2_025x-middle.png",
+    "last": "research/reports/09-dd-gradients/media/contact2_025x-last.png"
+  },
+  "episodes": [
+    {
+      "method": "pd_shared",
+      "label": "PD, shared gains (v2)",
+      "npz": "runs/d4/episodes/contact2-test-002__pd_shared.npz",
+      "sha256": "0fb72afbcf4ae7670714d889f3cae9b4f894561e67a96c87d720023a31ff537a",
+      "joint_rmse_mrad": 23.75148410952213,
+      "peak_normal_force_n": 0.0
+    },
+    {
+      "method": "pd_shared_v1",
+      "label": "PD, shared gains (v1)",
+      "npz": "runs/d4/episodes/contact2-test-002__pd_shared_v1.npz",
+      "sha256": "87573f75f0d270776dba5d37d4eebc13c2deacd1f337679a682b0fa2fb0794f5",
+      "joint_rmse_mrad": 16.147346671758687,
+      "peak_normal_force_n": 164.43504119855228
+    },
+    {
+      "method": "pd_residual_acmed",
+      "label": "PD + residual, AC, first reward",
+      "npz": "runs/d4/episodes/contact2-test-002__pd_residual_acmed-s0.npz",
+      "sha256": "e23c242b27cf7babcb824f827ef2c562b9f26b21b531a30457f3cf2a90dea18d",
+      "joint_rmse_mrad": 18.72923787995926,
+      "peak_normal_force_n": 123.63668835596498
+    },
+    {
+      "method": "pd_residual_acmed_s02_lowrate",
+      "label": "PD + residual, AC, rate-light, 20 mrad kernel",
+      "npz": "runs/d4/episodes/contact2-test-002__pd_residual_acmed_s02_lowrate-s0.npz",
+      "sha256": "6583578eed344ae768a660abdcdca7cb9b989a23e802e69c2dbbebc6ea8ea9a9",
+      "joint_rmse_mrad": 15.8100323850299,
+      "peak_normal_force_n": 118.89506180145042
+    }
+  ],
+  "reference": "gray sphere: commanded tool position, q_ref through llc.sim.nominal.NominalModel",
+  "trace": "measured tool path over the last 0.5 s, gray (old) to method color (new)",
+  "metrics": "joint RMSE over all joints and samples from t = 0 to the displayed time (mrad); peak normal force so far (N)",
+  "scene": "llc/sim/assets/panda_scene.xml",
+  "render_seconds": 9.31
+}

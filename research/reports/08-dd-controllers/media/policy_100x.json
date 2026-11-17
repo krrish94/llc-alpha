@@ -1,0 +1,73 @@
+{
+  "path": "research/reports/08-dd-controllers/media/policy_100x.mp4",
+  "record": "research/reports/08-dd-controllers/media/policy_100x.json",
+  "frames": 259,
+  "fps": 50,
+  "speed": 1.0,
+  "duration_s": 5.18,
+  "width": 2016,
+  "height": 750,
+  "resolution": [
+    2016,
+    750
+  ],
+  "view_size": [
+    480,
+    360
+  ],
+  "camera": "side",
+  "title": "Policy-like targets, case policy-test-010",
+  "plot_series": [
+    "pos_err",
+    "f_normal",
+    "tau2"
+  ],
+  "t_start": 0.0,
+  "t_end": 5.16,
+  "sample_step": 20,
+  "sample_rate_hz": 1000.0,
+  "posters": {
+    "first": "research/reports/08-dd-controllers/media/policy_100x-first.png",
+    "middle": "research/reports/08-dd-controllers/media/policy_100x-middle.png",
+    "last": "research/reports/08-dd-controllers/media/policy_100x-last.png"
+  },
+  "episodes": [
+    {
+      "method": "pd_shared",
+      "label": "PD, shared gains (v2)",
+      "npz": "runs/d2/episodes/policy-test-010__pd_shared.npz",
+      "sha256": "e119a3ac6b474cfafa72c44a9a3857edada6e9731c131f3c25f5d76012961938",
+      "joint_rmse_mrad": 74.46947296005945,
+      "peak_normal_force_n": 0.0
+    },
+    {
+      "method": "pd_shared_v1",
+      "label": "PD, shared gains (v1)",
+      "npz": "runs/d2/episodes/policy-test-010__pd_shared_v1.npz",
+      "sha256": "103d3f2b5322835897eabb1f77ef63c1f93846e94fc5528002e3499eb45f93f7",
+      "joint_rmse_mrad": 30.360836648004863,
+      "peak_normal_force_n": 0.0
+    },
+    {
+      "method": "pd_residual",
+      "label": "PD + residual",
+      "npz": "runs/d2/episodes/policy-test-010__pd_residual-s0.npz",
+      "sha256": "ea82d31771964bda235d9deb6faeed63fd6cc9347bc3db231d56dcb7a7de7724",
+      "joint_rmse_mrad": 32.532487095463466,
+      "peak_normal_force_n": 0.0
+    },
+    {
+      "method": "neural_torque",
+      "label": "Neural torque",
+      "npz": "runs/d2/episodes/policy-test-010__neural_torque-s0.npz",
+      "sha256": "019701b2cf2fc953c3e128238f14362d21c56e804bee8d65fc16e0d0a691faf4",
+      "joint_rmse_mrad": 54.760076236368256,
+      "peak_normal_force_n": 0.0
+    }
+  ],
+  "reference": "gray sphere: commanded tool position, q_ref through llc.sim.nominal.NominalModel",
+  "trace": "measured tool path over the last 0.5 s, gray (old) to method color (new)",
+  "metrics": "joint RMSE over all joints and samples from t = 0 to the displayed time (mrad); peak normal force so far (N)",
+  "scene": "llc/sim/assets/panda_scene.xml",
+  "render_seconds": 5.17
+}

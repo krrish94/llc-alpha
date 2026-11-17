@@ -1,0 +1,73 @@
+{
+  "path": "research/reports/15-m10-across-the-board/media/contact2_025x.mp4",
+  "record": "research/reports/15-m10-across-the-board/media/contact2_025x.json",
+  "frames": 845,
+  "fps": 50,
+  "speed": 0.25,
+  "duration_s": 16.9,
+  "width": 2016,
+  "height": 750,
+  "resolution": [
+    2016,
+    750
+  ],
+  "view_size": [
+    480,
+    360
+  ],
+  "camera": "detail",
+  "title": "Contact, case contact2-test-001",
+  "plot_series": [
+    "pos_err",
+    "f_normal",
+    "tau2"
+  ],
+  "t_start": 0.0,
+  "t_end": 4.22,
+  "sample_step": 5,
+  "sample_rate_hz": 1000.0,
+  "posters": {
+    "first": "research/reports/15-m10-across-the-board/media/contact2_025x-first.png",
+    "middle": "research/reports/15-m10-across-the-board/media/contact2_025x-middle.png",
+    "last": "research/reports/15-m10-across-the-board/media/contact2_025x-last.png"
+  },
+  "episodes": [
+    {
+      "method": "pd_shared",
+      "label": "PD tuned on the tracking composite",
+      "npz": "runs/m10/episodes_test/contact2-test-001__pd_shared.npz",
+      "sha256": "001ed33d80d5756e432e5a2b7dc7210d663b0d45d7950d10fafcb06c787ed179",
+      "joint_rmse_mrad": 9.218337892406145,
+      "peak_normal_force_n": 323.7251191187076
+    },
+    {
+      "method": "pd_feedforward",
+      "label": "PD + inverse-dynamics feedforward",
+      "npz": "runs/m10/episodes_test/contact2-test-001__pd_feedforward.npz",
+      "sha256": "06df37ea65c8146c7aa40b6351604211cc4c0d27f58c80821d47f28ceba5ea0e",
+      "joint_rmse_mrad": 9.25604831003985,
+      "peak_normal_force_n": 387.1133528132698
+    },
+    {
+      "method": "oracle_pd",
+      "label": "Oracle around the PD (privileged ceiling)",
+      "npz": "runs/m10/episodes_test/contact2-test-001__oracle_pd.npz",
+      "sha256": "7b3e0a064c1339cfa4e49ee4e30d1bd3fc29b42f9bed0dd3ae6e74cf4af31ae9",
+      "joint_rmse_mrad": 9.297476293055169,
+      "peak_normal_force_n": 319.25300602378144
+    },
+    {
+      "method": "m9_distill_gain_ext",
+      "label": "Distilled impedance student (free-space fix)",
+      "npz": "runs/m10/episodes_test/contact2-test-001__m9_distill_gain_ext-s0.npz",
+      "sha256": "2412da9d68fc78ddf3ce22e7c014c9f1d5302214404b7d9e1f017f728b83dd6e",
+      "joint_rmse_mrad": 8.983879016644426,
+      "peak_normal_force_n": 101.57627455739859
+    }
+  ],
+  "reference": "gray sphere: commanded tool position, q_ref through llc.sim.nominal.NominalModel",
+  "trace": "measured tool path over the last 0.5 s, gray (old) to method color (new)",
+  "metrics": "joint RMSE over all joints and samples from t = 0 to the displayed time (mrad); peak normal force so far (N)",
+  "scene": "llc/sim/assets/panda_2f85_0800.xml",
+  "render_seconds": 21.53
+}

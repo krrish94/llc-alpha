@@ -1,0 +1,73 @@
+{
+  "path": "research/reports/08-dd-controllers/media/task_025x.mp4",
+  "record": "research/reports/08-dd-controllers/media/task_025x.json",
+  "frames": 1845,
+  "fps": 50,
+  "speed": 0.25,
+  "duration_s": 36.9,
+  "width": 2016,
+  "height": 750,
+  "resolution": [
+    2016,
+    750
+  ],
+  "view_size": [
+    480,
+    360
+  ],
+  "camera": "detail",
+  "title": "Task sequence, case task-test-013",
+  "plot_series": [
+    "pos_err",
+    "f_normal",
+    "tau2"
+  ],
+  "t_start": 0.0,
+  "t_end": 9.22,
+  "sample_step": 5,
+  "sample_rate_hz": 1000.0,
+  "posters": {
+    "first": "research/reports/08-dd-controllers/media/task_025x-first.png",
+    "middle": "research/reports/08-dd-controllers/media/task_025x-middle.png",
+    "last": "research/reports/08-dd-controllers/media/task_025x-last.png"
+  },
+  "episodes": [
+    {
+      "method": "pd_shared",
+      "label": "PD, shared gains (v2)",
+      "npz": "runs/d2/episodes/task-test-013__pd_shared.npz",
+      "sha256": "7ef7f657103ebc8ac01d76e32435660da0270f23cace9757e419cb4eaa4237cb",
+      "joint_rmse_mrad": 16.79262936499073,
+      "peak_normal_force_n": 142.2794790015643
+    },
+    {
+      "method": "pd_shared_v1",
+      "label": "PD, shared gains (v1)",
+      "npz": "runs/d2/episodes/task-test-013__pd_shared_v1.npz",
+      "sha256": "684e7c050bc755d153798045349ef92d7db4e91163473558bdad2401bf75d1fe",
+      "joint_rmse_mrad": 4.363562344612046,
+      "peak_normal_force_n": 58.463488056922664
+    },
+    {
+      "method": "pd_residual",
+      "label": "PD + residual",
+      "npz": "runs/d2/episodes/task-test-013__pd_residual-s0.npz",
+      "sha256": "0fa2e7a311b963969686e7ef3c188538746bbc7ce826229cc0419eb36f761024",
+      "joint_rmse_mrad": 5.749956363971195,
+      "peak_normal_force_n": 49.42287920991932
+    },
+    {
+      "method": "neural_torque",
+      "label": "Neural torque",
+      "npz": "runs/d2/episodes/task-test-013__neural_torque-s0.npz",
+      "sha256": "8ba13f3241fb76ad67b5f7fe764e53eb89c20ea0c5d4fac872d104727a0aa6dc",
+      "joint_rmse_mrad": 6.600538419619714,
+      "peak_normal_force_n": 95.98784609397958
+    }
+  ],
+  "reference": "gray sphere: commanded tool position, q_ref through llc.sim.nominal.NominalModel",
+  "trace": "measured tool path over the last 0.5 s, gray (old) to method color (new)",
+  "metrics": "joint RMSE over all joints and samples from t = 0 to the displayed time (mrad); peak normal force so far (N)",
+  "scene": "llc/sim/assets/panda_scene.xml",
+  "render_seconds": 35.79
+}

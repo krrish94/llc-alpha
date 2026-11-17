@@ -1,0 +1,148 @@
+<h2>Question</h2>
+<p>How much tracking, compliance and contact performance does a conventional joint-space PD controller with gravity compensation leave on the table when one gain set must serve every regime, compared with gains tuned for each regime separately? The size of this gap is the headroom a learned low-level controller could capture, and the project's first go/no-go measurement. The hypothesis of the research agenda is that no single gain set serves holding, free-space tracking, discontinuous policy targets and contact equally well.</p>
+<p>Meaningful effect, fixed before evaluation: per-regime tuning counts as material headroom in a regime if it reduces at least one primary metric by 20% or more with the 95% bootstrap interval of the paired difference excluding zero.</p>
+
+<h2>Setup</h2>
+<p>Plant: MuJoCo model of a torque-controlled Franka Panda with a fixed spherical tool, a table and a wall (<a href="../adr/index.html">ADR 0001</a>). Physics and control at 1 kHz. Six regimes with sampled speeds and amplitudes, three case splits and the metric definitions follow <a href="../protocols/evaluation-v1/index.html">evaluation protocol v1</a>. All controllers track identical joint-space references generated once from the nominal model; contact references command the tool 1 cm into the surface, so the contact force is a consequence of the controller's compliance, not a commanded target.</p>
+<p>Conventional controllers use only the nominal model (gravity torque, or full inverse dynamics for computed torque). The plant is nominal in this milestone; dynamics perturbations are Milestone 3.</p>
+
+<h2>Baselines and tuning</h2>
+<p>Four conventional controllers. <em>PD, initial gains</em>: the hand-set starting point of tuning (stiffness 400, 400, 300, 300, 100, 60, 30 Nm/rad, damping ratio 1). <em>PD, shared gains</em>: one gain set tuned by CMA-ES on the tune split of all six regimes at once. <em>PD, per-regime gains</em>: the same tuning run separately for each regime, evaluated on that regime; this is the condition-aware reference, which assumes the regime is known. <em>Computed torque</em>: inverse dynamics with the nominal model and the reference acceleration, tuned on smooth tracking only; it is privileged because it uses information the other controllers do not have (full model, reference acceleration) and is reported on every regime for context only.</p>
+<p>Tuning parameters: a stiffness per joint and one damping ratio, with kd<sub>i</sub> = 2 zeta sqrt(kp<sub>i</sub> M<sub>ii</sub>) so that zeta = 1 is critical damping with respect to the nominal diagonal inertia at the home pose. Bounds: 5 to 3000 Nm/rad for joints 1 to 4, 2 to 600 Nm/rad for joints 5 to 7, damping ratio 0.2 to 4. The objective is the composite of the protocol (declared weights on normalized metrics; it is a tuning device, not a research signal). Tuning cost is listed below.</p><table>
+<caption>PD stiffness per joint (Nm/rad) and the common damping ratio; damping follows kd_i = 2 zeta sqrt(kp_i M_ii) with M_ii the nominal diagonal inertia at the home configuration.</caption>
+<thead>
+<tr><th>Gain set</th><th class="num">kp1</th><th class="num">kp2</th><th class="num">kp3</th><th class="num">kp4</th><th class="num">kp5</th><th class="num">kp6</th><th class="num">kp7</th><th class="num">damping ratio</th></tr>
+</thead>
+<tbody>
+<tr><td>initial</td><td class="num">400</td><td class="num">400</td><td class="num">300</td><td class="num">300</td><td class="num">100</td><td class="num">60</td><td class="num">30</td><td class="num">1.00</td></tr>
+<tr><td>shared</td><td class="num">1447</td><td class="num">766</td><td class="num">1656</td><td class="num">1190</td><td class="num">593</td><td class="num">553</td><td class="num">111</td><td class="num">0.65</td></tr>
+<tr><td>Hold</td><td class="num">2995</td><td class="num">2927</td><td class="num">2985</td><td class="num">2960</td><td class="num">600</td><td class="num">589</td><td class="num">249</td><td class="num">1.78</td></tr>
+<tr><td>Smooth tracking</td><td class="num">1522</td><td class="num">2918</td><td class="num">1316</td><td class="num">2338</td><td class="num">586</td><td class="num">581</td><td class="num">349</td><td class="num">2.45</td></tr>
+<tr><td>Policy-like targets (20 Hz hold)</td><td class="num">403</td><td class="num">355</td><td class="num">387</td><td class="num">251</td><td class="num">159</td><td class="num">130</td><td class="num">111</td><td class="num">0.20</td></tr>
+<tr><td>Step targets</td><td class="num">1163</td><td class="num">2715</td><td class="num">1602</td><td class="num">1085</td><td class="num">311</td><td class="num">359</td><td class="num">364</td><td class="num">0.78</td></tr>
+<tr><td>Sustained contact</td><td class="num">2933</td><td class="num">769</td><td class="num">2981</td><td class="num">2922</td><td class="num">504</td><td class="num">598</td><td class="num">176</td><td class="num">0.37</td></tr>
+<tr><td>Contact transitions</td><td class="num">235</td><td class="num">11</td><td class="num">108</td><td class="num">5</td><td class="num">203</td><td class="num">92</td><td class="num">108</td><td class="num">1.29</td></tr>
+</tbody>
+</table><table>
+<caption>Tuning cost and objective on the tune split (6 cases per regime; CMA-ES, population 12, 40 iterations).</caption>
+<thead>
+<tr><th>Target</th><th class="num">Composite, initial gains</th><th class="num">Composite, tuned</th><th class="num">Episodes evaluated</th><th class="num">Wall time (min)</th></tr>
+</thead>
+<tbody>
+<tr><td>shared</td><td class="num">1.988</td><td class="num">1.309</td><td class="num">17280</td><td class="num">8.2</td></tr>
+<tr><td>ct_smooth</td><td class="num">0.196</td><td class="num">0.038</td><td class="num">2880</td><td class="num">0.5</td></tr>
+<tr><td>hold</td><td class="num">1.364</td><td class="num">0.201</td><td class="num">2880</td><td class="num">0.3</td></tr>
+<tr><td>smooth</td><td class="num">0.395</td><td class="num">0.077</td><td class="num">2880</td><td class="num">0.4</td></tr>
+<tr><td>zoh</td><td class="num">1.143</td><td class="num">0.590</td><td class="num">2880</td><td class="num">0.4</td></tr>
+<tr><td>step</td><td class="num">2.358</td><td class="num">1.848</td><td class="num">2880</td><td class="num">0.4</td></tr>
+<tr><td>contact</td><td class="num">4.482</td><td class="num">1.313</td><td class="num">2880</td><td class="num">6.9</td></tr>
+<tr><td>transition</td><td class="num">2.188</td><td class="num">1.231</td><td class="num">2880</td><td class="num">1.9</td></tr>
+</tbody>
+</table>
+
+<h2>Results</h2>
+<p>All controllers are evaluated on the same 16 test cases per regime (96 cases). No case diverged. The table lists the primary metrics; the interactive figure below it shows every metric, every regime and the per-case distributions.</p><table>
+<caption>Headroom of per-regime tuning over shared gains on the primary metrics (test split, paired by case; negative differences favour per-regime tuning for lower-is-better metrics).</caption>
+<thead>
+<tr><th>Regime</th><th>Metric</th><th class="num">Shared gains</th><th class="num">Per-regime gains</th><th class="num">Paired difference [95% CI]</th><th class="num">Relative</th><th class="num">n</th></tr>
+</thead>
+<tbody>
+<tr><td>Hold</td><td>Position RMSE (rad)</td><td class="num">0.0005743</td><td class="num">0.0002564</td><td class="num">-0.0003179 [-0.0003676, -0.0002649]</td><td class="num">-55%</td><td class="num">16</td></tr>
+<tr><td>Hold</td><td>Peak deflection under 10 N pulse (m)</td><td class="num">0.004431</td><td class="num">0.001768</td><td class="num">-0.002663 [-0.003122, -0.002203]</td><td class="num">-60%</td><td class="num">16</td></tr>
+<tr><td>Hold</td><td>Recovery time after pulse (s)</td><td class="num">0.06187</td><td class="num">0.005563</td><td class="num">-0.05631 [-0.06975, -0.04337]</td><td class="num">-91%</td><td class="num">16</td></tr>
+<tr><td>Smooth tracking</td><td>Position RMSE (rad)</td><td class="num">0.002662</td><td class="num">0.0009226</td><td class="num">-0.001739 [-0.002329, -0.001216]</td><td class="num">-65%</td><td class="num">16</td></tr>
+<tr><td>Smooth tracking</td><td>Velocity RMSE (rad/s)</td><td class="num">0.02957</td><td class="num">0.008428</td><td class="num">-0.02114 [-0.03096, -0.01181]</td><td class="num">-71%</td><td class="num">16</td></tr>
+<tr><td>Smooth tracking</td><td>Torque rate RMS (Nm/s)</td><td class="num">48.38</td><td class="num">41.57</td><td class="num">-6.808 [-12.55, -2.784]</td><td class="num">-14%</td><td class="num">16</td></tr>
+<tr><td>Policy-like targets (20 Hz hold)</td><td>Position RMSE (rad)</td><td class="num">0.01452</td><td class="num">0.01565</td><td class="num">0.001122 [-0.001456, 0.004354]</td><td class="num">+8%</td><td class="num">16</td></tr>
+<tr><td>Policy-like targets (20 Hz hold)</td><td>Torque rate RMS (Nm/s)</td><td class="num">2309</td><td class="num">619.4</td><td class="num">-1689 [-1894, -1469]</td><td class="num">-73%</td><td class="num">16</td></tr>
+<tr><td>Step targets</td><td>Position RMSE (rad)</td><td class="num">0.03029</td><td class="num">0.03002</td><td class="num">-0.0002708 [-0.0004019, -0.0001559]</td><td class="num">-1%</td><td class="num">16</td></tr>
+<tr><td>Step targets</td><td>Settling time after step (s)</td><td class="num">0.1571</td><td class="num">0.124</td><td class="num">-0.03309 [-0.04067, -0.02566]</td><td class="num">-21%</td><td class="num">16</td></tr>
+<tr><td>Step targets</td><td>Step overshoot (-)</td><td class="num">0.02619</td><td class="num">0.01492</td><td class="num">-0.01126 [-0.01631, -0.007013]</td><td class="num">-43%</td><td class="num">16</td></tr>
+<tr><td>Step targets</td><td>Torque rate RMS (Nm/s)</td><td class="num">2020</td><td class="num">2070</td><td class="num">50.36 [28.28, 74.24]</td><td class="num">+2%</td><td class="num">16</td></tr>
+<tr><td>Sustained contact</td><td>Tangential tool error during slide (m)</td><td class="num">0.007118</td><td class="num">0.005764</td><td class="num">-0.001355 [-0.001382, -0.001321]</td><td class="num">-19%</td><td class="num">16</td></tr>
+<tr><td>Sustained contact</td><td>Normal force std in contact phase (N)</td><td class="num">6.246</td><td class="num">5.554</td><td class="num">-0.6922 [-1.077, -0.302]</td><td class="num">-11%</td><td class="num">16</td></tr>
+<tr><td>Sustained contact</td><td>Contact losses of 5 ms or more during contact phase (-)</td><td class="num">0.125</td><td class="num">0</td><td class="num">-0.125 [-0.3125, 0]</td><td class="num">-100%</td><td class="num">16</td></tr>
+<tr><td>Sustained contact</td><td>Mean normal force in contact phase (N)</td><td class="num">23.92</td><td class="num">28.52</td><td class="num">4.598 [3.971, 5.224]</td><td class="num">+19%</td><td class="num">16</td></tr>
+<tr><td>Contact transitions</td><td>Peak normal force (N)</td><td class="num">91.84</td><td class="num">31.69</td><td class="num">-60.15 [-73.05, -48.37]</td><td class="num">-65%</td><td class="num">16</td></tr>
+<tr><td>Contact transitions</td><td>Impulse in first 100 ms of contact (N s)</td><td class="num">6.457</td><td class="num">0.8518</td><td class="num">-5.605 [-6.555, -4.776]</td><td class="num">-87%</td><td class="num">16</td></tr>
+<tr><td>Contact transitions</td><td>Contact losses of 5 ms or more within 0.3 s of onset (-)</td><td class="num">0</td><td class="num">0.5625</td><td class="num">0.5625 [0.3125, 0.8125]</td><td class="num">—</td><td class="num">16</td></tr>
+<tr><td>Contact transitions</td><td>Tracking recovery after release (s)</td><td class="num">0.04281</td><td class="num">0.05781</td><td class="num">0.015 [0.006436, 0.02469]</td><td class="num">+35%</td><td class="num">16</td></tr>
+<tr><td>Contact transitions</td><td>Position RMSE (rad)</td><td class="num">0.006102</td><td class="num">0.008763</td><td class="num">0.002661 [0.00239, 0.002883]</td><td class="num">+44%</td><td class="num">16</td></tr>
+</tbody>
+</table><figure class="widget compare" id="fig-compare" data-widget="compare" data-src="data/compare.json" data-regime="contact" data-metric="f_std">
+<div class="widget-body">
+<p class="selection">Selection: Sustained contact, Normal force std in contact phase (N); n = 16 cases. Mean with 95% bootstrap CI (1000 resamples); difference vs PD, shared gains is paired by case, failed cases dropped from the pair.</p>
+<table class="compare-table">
+<thead>
+<tr><th>Method</th><th class="num">Mean</th><th class="num">95% CI</th><th class="num">n</th><th class="num">Δ vs reference</th><th class="num">95% CI (paired)</th><th class="num">Pairs</th></tr>
+</thead>
+<tbody>
+<tr><td>PD, shared gains</td><td class="num">6.246</td><td class="num">[4.967, 7.474]</td><td class="num">16</td><td class="num">reference</td><td class="num">—</td><td class="num">—</td></tr>
+<tr><td>PD, gains tuned per regime</td><td class="num">5.554</td><td class="num">[4.25, 6.984]</td><td class="num">16</td><td class="num">-0.6922</td><td class="num">[-1.077, -0.302]</td><td class="num">16</td></tr>
+<tr><td>PD, initial hand-set gains</td><td class="num">6.975</td><td class="num">[6.339, 7.572]</td><td class="num">16</td><td class="num">0.7281</td><td class="num">[-0.2834, 1.64]</td><td class="num">16</td></tr>
+<tr><td>Computed torque (privileged)</td><td class="num">24.58</td><td class="num">[10.28, 41.59]</td><td class="num">16</td><td class="num">18.33</td><td class="num">[4.284, 37.2]</td><td class="num">16</td></tr>
+</tbody>
+</table>
+</div>
+<figcaption>Per-case metric values on the test split (16 cases per regime). Dots are cases, the tick is the mean and the bar its 95% bootstrap interval; the table gives the paired difference against the shared gain set. The composite is the tuning objective, not a research signal. <a class="source" href="data/compare.json">Data (JSON)</a></figcaption>
+</figure>
+
+<h2>Representative episodes</h2>
+<p>One case per regime, selected by a declared rule (the case whose shared-gain composite is the median of its regime), so the episodes are typical rather than favourable. Contact forces are drawn at the native 1 kHz rate in the static figures.</p><figure class="widget timeseries" id="fig-ts-hold" data-widget="timeseries" data-src="data/ts_hold.json" data-fallback="figures/ts_hold.svg">
+<div class="widget-body">
+<img src="figures/ts_hold.svg" alt="Hold: representative case hold-test-015 (median pd_shared composite). Contact force is shown at the native 1 kHz rate in the static figure and at 200 Hz in the interactive view.">
+</div>
+<figcaption>Hold: representative case hold-test-015 (median pd_shared composite). Contact force is shown at the native 1 kHz rate in the static figure and at 200 Hz in the interactive view. <a class="source" href="data/ts_hold.json">Data (JSON)</a></figcaption>
+</figure>
+<figure class="widget timeseries" id="fig-ts-smooth" data-widget="timeseries" data-src="data/ts_smooth.json" data-fallback="figures/ts_smooth.svg">
+<div class="widget-body">
+<img src="figures/ts_smooth.svg" alt="Smooth tracking: representative case smooth-test-010 (median pd_shared composite). Contact force is shown at the native 1 kHz rate in the static figure and at 200 Hz in the interactive view.">
+</div>
+<figcaption>Smooth tracking: representative case smooth-test-010 (median pd_shared composite). Contact force is shown at the native 1 kHz rate in the static figure and at 200 Hz in the interactive view. <a class="source" href="data/ts_smooth.json">Data (JSON)</a></figcaption>
+</figure>
+<figure class="widget timeseries" id="fig-ts-zoh" data-widget="timeseries" data-src="data/ts_zoh.json" data-fallback="figures/ts_zoh.svg">
+<div class="widget-body">
+<img src="figures/ts_zoh.svg" alt="Policy-like targets (20 Hz hold): representative case zoh-test-012 (median pd_shared composite). Contact force is shown at the native 1 kHz rate in the static figure and at 200 Hz in the interactive view.">
+</div>
+<figcaption>Policy-like targets (20 Hz hold): representative case zoh-test-012 (median pd_shared composite). Contact force is shown at the native 1 kHz rate in the static figure and at 200 Hz in the interactive view. <a class="source" href="data/ts_zoh.json">Data (JSON)</a></figcaption>
+</figure>
+<figure class="widget timeseries" id="fig-ts-step" data-widget="timeseries" data-src="data/ts_step.json" data-fallback="figures/ts_step.svg">
+<div class="widget-body">
+<img src="figures/ts_step.svg" alt="Step targets: representative case step-test-009 (median pd_shared composite). Contact force is shown at the native 1 kHz rate in the static figure and at 200 Hz in the interactive view.">
+</div>
+<figcaption>Step targets: representative case step-test-009 (median pd_shared composite). Contact force is shown at the native 1 kHz rate in the static figure and at 200 Hz in the interactive view. <a class="source" href="data/ts_step.json">Data (JSON)</a></figcaption>
+</figure>
+<figure class="widget timeseries" id="fig-ts-contact" data-widget="timeseries" data-src="data/ts_contact.json" data-fallback="figures/ts_contact.svg">
+<div class="widget-body">
+<img src="figures/ts_contact.svg" alt="Sustained contact: representative case contact-test-013 (median pd_shared composite). Contact force is shown at the native 1 kHz rate in the static figure and at 200 Hz in the interactive view.">
+</div>
+<figcaption>Sustained contact: representative case contact-test-013 (median pd_shared composite). Contact force is shown at the native 1 kHz rate in the static figure and at 200 Hz in the interactive view. <a class="source" href="data/ts_contact.json">Data (JSON)</a></figcaption>
+</figure>
+<figure class="widget timeseries" id="fig-ts-transition" data-widget="timeseries" data-src="data/ts_transition.json" data-fallback="figures/ts_transition.svg">
+<div class="widget-body">
+<img src="figures/ts_transition.svg" alt="Contact transitions: representative case transition-test-012 (median pd_shared composite). Contact force is shown at the native 1 kHz rate in the static figure and at 200 Hz in the interactive view.">
+</div>
+<figcaption>Contact transitions: representative case transition-test-012 (median pd_shared composite). Contact force is shown at the native 1 kHz rate in the static figure and at 200 Hz in the interactive view. <a class="source" href="data/ts_transition.json">Data (JSON)</a></figcaption>
+</figure>
+
+<h2>Findings</h2>
+<ol>
+<li><strong>Headroom is material in five of six regimes.</strong> Per-regime gains reduce position RMSE by 55% in hold (0.57 to 0.26 mrad) and 65% in smooth tracking (2.7 to 0.9 mrad), pulse deflection by 60% and pulse recovery time by 91% in hold, and torque-rate RMS by 73% for policy-like 20 Hz targets at unchanged position error (2309 to 619 Nm/s). In transitions the peak impact force drops by 65% (92 to 32 N) and the onset impulse by 87%. All of these differences have 95% intervals well clear of zero (table above).</li>
+<li><strong>Step targets and sustained contact gain little from retuning.</strong> On steps the position RMSE is unchanged (30.3 to 30.0 mrad) and only settling time (-21%) and overshoot (-43%) improve; both gain sets saturate the actuators about 2% of the time, so the limit is torque authority, not gains. In sustained contact the tangential error improves by 19% and force variation by 11%, below the 20% threshold on force variation.</li>
+<li><strong>The tuned gain sets are incompatible with each other.</strong> Hold, smooth tracking and sustained contact drive the stiffness to the upper bound (about 3000 Nm/rad on joints 1 to 4, 600 on 5 to 7). Policy-like targets prefer soft, lightly damped gains (about 400 Nm/rad, damping ratio 0.2), because a stiff loop converts each 20 Hz target jump into a torque spike. Transitions prefer extremely soft gains on the gravity-loaded joints (11 and 5 Nm/rad on joints 2 and 4). The shared set settles in between (770 to 1660 Nm/rad, damping ratio 0.65). This is direct evidence for the agenda's premise that there is no universal gain set across regimes.</li>
+<li><strong>Computed torque is the best free-space tracker and the worst everywhere else.</strong> It reaches 0.19 mrad RMSE on smooth tracking (privileged by the reference acceleration and the full model), but on step targets it saturates 47% of the time and overshoots by 80% of the step, and in contact it presses with 120 N on average and chatters. Inverse-dynamics feedforward with high loop gains is not a usable low-level controller for discontinuous references or contact without further structure.</li>
+<li><strong>The composite objective can be gamed by compliance.</strong> The transition-tuned gains lower the peak force mainly by not pressing: the mean force in the press phase is 1 N against 52 N for the shared gains, and tracking inside the surface is worse (+44% position RMSE, more bounces). The transition headroom on peak force is therefore partly an artefact of an objective that does not ask for a contact force to be maintained. Protocol v2 must add a press-phase requirement before this regime is used to rank learned controllers.</li>
+</ol>
+
+<h2>Caveats and failures</h2>
+<ul>
+<li>The headroom estimate depends on the composite's weights; the per-metric paired differences above are the evidence, the composite is only the tuning device. Finding 5 shows one case where the two disagree.</li>
+<li>Stiffness bounds are binding for hold, smooth tracking and sustained contact; the headroom in those regimes is a lower bound on what stiffer control would give in this plant, and real actuators and sensor noise (Milestone 3) will cap stiffness in practice.</li>
+<li>The plant's contact is a padded hard surface (about 60 kN/m); impact peaks scale with contact stiffness and would be higher on steel.</li>
+<li>Sliding under compliant control shows stick-slip in this plant; contact losses shorter than 5 ms are not counted. The shared gains produce a stick-slip band in the representative sustained-contact case.</li>
+<li>Computed torque touched the environment with a non-tool link in 10 of 96 cases (unintended contact); PD controllers in 1 case each. These cases are included in all statistics.</li>
+<li>Tuning used 6 cases per regime and 40 CMA-ES iterations; a larger budget could move the per-regime optima, especially for the step and contact regimes where the objective surface is flat.</li>
+</ul>
+
+<h2>Next steps</h2>
+<p>The gate passes: the headroom is large and regime-dependent, and the direction of the dependence (stiff for holding and tracking, soft and lightly damped for policy-like targets, compliant for impacts) is exactly what a state- and history-dependent controller could exploit. Milestone 2 trains the three learned parameterizations against the shared-gain PD under identical observations, limits and cases, keeping the per-regime gains as the condition-aware reference. Protocol v2 will add a press-phase force requirement for the transition and contact regimes.</p>

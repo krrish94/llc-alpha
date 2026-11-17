@@ -1,0 +1,65 @@
+{
+  "path": "research/reports/14-m9-plant-v3/media/contact2_025x.mp4",
+  "record": "research/reports/14-m9-plant-v3/media/contact2_025x.json",
+  "frames": 845,
+  "fps": 50,
+  "speed": 0.25,
+  "duration_s": 16.9,
+  "width": 1520,
+  "height": 750,
+  "resolution": [
+    1520,
+    750
+  ],
+  "view_size": [
+    480,
+    360
+  ],
+  "camera": "detail",
+  "title": "Contact, case contact2-test-001",
+  "plot_series": [
+    "pos_err",
+    "f_normal",
+    "tau2"
+  ],
+  "t_start": 0.0,
+  "t_end": 4.22,
+  "sample_step": 5,
+  "sample_rate_hz": 1000.0,
+  "posters": {
+    "first": "research/reports/14-m9-plant-v3/media/contact2_025x-first.png",
+    "middle": "research/reports/14-m9-plant-v3/media/contact2_025x-middle.png",
+    "last": "research/reports/14-m9-plant-v3/media/contact2_025x-last.png"
+  },
+  "episodes": [
+    {
+      "method": "pd_shared",
+      "label": "PD, shared gains (re-tuned on plant v3)",
+      "npz": "runs/m9/episodes_baselines/contact2-test-001__pd_shared.npz",
+      "sha256": "001ed33d80d5756e432e5a2b7dc7210d663b0d45d7950d10fafcb06c787ed179",
+      "joint_rmse_mrad": 9.218337892406145,
+      "peak_normal_force_n": 323.7251191187076
+    },
+    {
+      "method": "pd_shared_v2gains",
+      "label": "PD with the plant v2 gains",
+      "npz": "runs/m9/episodes_baselines/contact2-test-001__pd_shared_v2gains.npz",
+      "sha256": "8008d4d7af21182c2dc89e3d4d45b0385463bb066873e71d20ec0a6cb0bc0f46",
+      "joint_rmse_mrad": 14.812779551766129,
+      "peak_normal_force_n": 388.06769570268744
+    },
+    {
+      "method": "oracle_pd",
+      "label": "Oracle around the PD (privileged)",
+      "npz": "runs/m9/episodes_baselines/contact2-test-001__oracle_pd.npz",
+      "sha256": "7b3e0a064c1339cfa4e49ee4e30d1bd3fc29b42f9bed0dd3ae6e74cf4af31ae9",
+      "joint_rmse_mrad": 9.297476293055169,
+      "peak_normal_force_n": 319.25300602378144
+    }
+  ],
+  "reference": "gray sphere: commanded tool position, q_ref through llc.sim.nominal.NominalModel",
+  "trace": "measured tool path over the last 0.5 s, gray (old) to method color (new)",
+  "metrics": "joint RMSE over all joints and samples from t = 0 to the displayed time (mrad); peak normal force so far (N)",
+  "scene": "llc/sim/assets/panda_2f85_0800.xml",
+  "render_seconds": 22.38
+}

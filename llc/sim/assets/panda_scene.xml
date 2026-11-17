@@ -1,0 +1,134 @@
+<mujoco model="panda torque scene">
+  <!-- Franka Emika Panda, torque-controlled, with a fixed spherical tool.
+       Kinematic/inertial parameters: mujoco_menagerie franka_emika_panda (Apache-2.0).
+       Scene: floor, a table block in front of the robot and a wall beyond it.
+       Contacts: elliptic friction cone, explicit spring-damper reference (solref="-20000 -200",
+       about 60 kN/m for the tool's effective mass) with a graded impedance (solimp) so the
+       equilibrium sits inside the surface instead of flickering at the detection boundary. -->
+  <compiler angle="radian" meshdir="panda" autolimits="true"/>
+  <option timestep="0.001" integrator="implicitfast" impratio="10" cone="elliptic" gravity="0 0 -9.81"/>
+
+  <default>
+    <default class="panda">
+      <joint armature="0.1" damping="1" axis="0 0 1" range="-2.8973 2.8973"/>
+      <motor ctrllimited="true"/>
+      <default class="panda/collision">
+        <geom type="mesh" group="3" rgba="0.85 0.85 0.85 1" solref="-20000 -200" solimp="0.3 0.95 0.005" friction="0.5 0.005 0.0001"/>
+      </default>
+    </default>
+    <default class="env">
+      <geom solref="-20000 -200" solimp="0.3 0.95 0.005" friction="0.5 0.005 0.0001"/>
+    </default>
+    <default class="tool">
+      <geom solref="-20000 -200" solimp="0.3 0.95 0.005" friction="0.5 0.005 0.0001" rgba="0.2 0.35 0.75 1"/>
+    </default>
+  </default>
+
+  <asset>
+    <mesh name="link0_c" file="link0.stl"/>
+    <mesh name="link1_c" file="link1.stl"/>
+    <mesh name="link2_c" file="link2.stl"/>
+    <mesh name="link3_c" file="link3.stl"/>
+    <mesh name="link4_c" file="link4.stl"/>
+    <mesh name="link5_c0" file="link5_collision_0.obj"/>
+    <mesh name="link5_c1" file="link5_collision_1.obj"/>
+    <mesh name="link5_c2" file="link5_collision_2.obj"/>
+    <mesh name="link6_c" file="link6.stl"/>
+    <mesh name="link7_c" file="link7.stl"/>
+  </asset>
+
+  <visual>
+    <headlight diffuse="0.7 0.7 0.7" ambient="0.35 0.35 0.35" specular="0 0 0"/>
+    <global azimuth="135" elevation="-20" offwidth="960" offheight="540"/>
+    <rgba haze="1 1 1 1"/>
+  </visual>
+
+  <worldbody>
+    <light pos="0 0 2.5" dir="0 0 -1" directional="true"/>
+    <light pos="1.5 -1.5 2" dir="-0.5 0.5 -1"/>
+    <geom name="floor" class="env" type="plane" size="2 2 0.05" rgba="0.96 0.96 0.96 1"/>
+    <geom name="table" class="env" type="box" pos="0.475 0 0.075" size="0.125 0.3 0.075" rgba="0.88 0.88 0.86 1"/>
+    <geom name="wall" class="env" type="box" pos="0.68 0 0.45" size="0.02 0.3 0.3" rgba="0.88 0.88 0.86 1"/>
+    <camera name="front" pos="2.2 -1.6 1.1" xyaxes="0.6 0.8 0 -0.25 0.19 0.95" fovy="38"/>
+    <camera name="side" pos="0.45 -2.4 0.7" xyaxes="1 0 0 0 0.2 0.98" fovy="36"/>
+    <camera name="detail" pos="-0.2 -1.3 0.9" xyaxes="0.880 -0.474 0 0.178 0.331 0.926" fovy="32"/>
+
+    <body name="link0" childclass="panda">
+      <inertial mass="0.629769" pos="-0.041018 -0.00014 0.049974"
+        fullinertia="0.00315 0.00388 0.004285 8.2904e-7 0.00015 8.2299e-6"/>
+      <geom mesh="link0_c" class="panda/collision" contype="0" conaffinity="0"/>
+      <body name="link1" pos="0 0 0.333">
+        <inertial mass="4.970684" pos="0.003875 0.002081 -0.04762"
+          fullinertia="0.70337 0.70661 0.0091170 -0.00013900 0.0067720 0.019169"/>
+        <joint name="joint1"/>
+        <geom mesh="link1_c" class="panda/collision"/>
+        <body name="link2" quat="1 -1 0 0">
+          <inertial mass="0.646926" pos="-0.003141 -0.02872 0.003495"
+            fullinertia="0.0079620 2.8110e-2 2.5995e-2 -3.925e-3 1.0254e-2 7.04e-4"/>
+          <joint name="joint2" range="-1.7628 1.7628"/>
+          <geom mesh="link2_c" class="panda/collision"/>
+          <body name="link3" pos="0 -0.316 0" quat="1 1 0 0">
+            <joint name="joint3"/>
+            <inertial mass="3.228604" pos="2.7518e-2 3.9252e-2 -6.6502e-2"
+              fullinertia="3.7242e-2 3.6155e-2 1.083e-2 -4.761e-3 -1.1396e-2 -1.2805e-2"/>
+            <geom mesh="link3_c" class="panda/collision"/>
+            <body name="link4" pos="0.0825 0 0" quat="1 1 0 0">
+              <inertial mass="3.587895" pos="-5.317e-2 1.04419e-1 2.7454e-2"
+                fullinertia="2.5853e-2 1.9552e-2 2.8323e-2 7.796e-3 -1.332e-3 8.641e-3"/>
+              <joint name="joint4" range="-3.0718 -0.0698"/>
+              <geom mesh="link4_c" class="panda/collision"/>
+              <body name="link5" pos="-0.0825 0.384 0" quat="1 -1 0 0">
+                <inertial mass="1.225946" pos="-1.1953e-2 4.1065e-2 -3.8437e-2"
+                  fullinertia="3.5549e-2 2.9474e-2 8.627e-3 -2.117e-3 -4.037e-3 2.29e-4"/>
+                <joint name="joint5"/>
+                <geom mesh="link5_c0" class="panda/collision"/>
+                <geom mesh="link5_c1" class="panda/collision"/>
+                <geom mesh="link5_c2" class="panda/collision"/>
+                <body name="link6" quat="1 1 0 0">
+                  <inertial mass="1.666555" pos="6.0149e-2 -1.4117e-2 -1.0517e-2"
+                    fullinertia="1.964e-3 4.354e-3 5.433e-3 1.09e-4 -1.158e-3 3.41e-4"/>
+                  <joint name="joint6" range="-0.0175 3.7525"/>
+                  <geom mesh="link6_c" class="panda/collision"/>
+                  <body name="link7" pos="0.088 0 0" quat="1 1 0 0">
+                    <inertial mass="7.35522e-01" pos="1.0517e-2 -4.252e-3 6.1597e-2"
+                      fullinertia="1.2516e-2 1.0027e-2 4.815e-3 -4.28e-4 -1.196e-3 -7.41e-4"/>
+                    <joint name="joint7"/>
+                    <geom mesh="link7_c" class="panda/collision"/>
+                    <!-- Fixed tool replacing the gripper: a flange cylinder, a thin shaft (visual only) and a spherical tip 15 cm from the flange, about the length of the Franka hand with fingers.
+                         Mass and inertia are set explicitly (not from geometry). -->
+                    <body name="tool" pos="0 0 0.107" quat="0.3826834 0 0 0.9238795">
+                      <inertial mass="0.7" pos="0 0 0.06" diaginertia="0.0030 0.0030 0.0008"/>
+                      <geom name="tool_flange" class="tool" type="cylinder" size="0.03 0.03" pos="0 0 0.03"/>
+                      <geom name="tool_shaft" class="tool" type="cylinder" size="0.012 0.045" pos="0 0 0.095" contype="0" conaffinity="0"/>
+                      <geom name="tool_tip" class="tool" type="sphere" size="0.02" pos="0 0 0.15"/>
+                      <site name="tool_tip" pos="0 0 0.15" size="0.005"/>
+                      <site name="tool_touch" type="sphere" pos="0 0 0.15" size="0.023" rgba="0 0 0 0"/>
+                    </body>
+                  </body>
+                </body>
+              </body>
+            </body>
+          </body>
+        </body>
+      </body>
+    </body>
+  </worldbody>
+
+  <actuator>
+    <motor name="motor1" joint="joint1" ctrlrange="-87 87"/>
+    <motor name="motor2" joint="joint2" ctrlrange="-87 87"/>
+    <motor name="motor3" joint="joint3" ctrlrange="-87 87"/>
+    <motor name="motor4" joint="joint4" ctrlrange="-87 87"/>
+    <motor name="motor5" joint="joint5" ctrlrange="-12 12"/>
+    <motor name="motor6" joint="joint6" ctrlrange="-12 12"/>
+    <motor name="motor7" joint="joint7" ctrlrange="-12 12"/>
+  </actuator>
+
+  <sensor>
+    <touch name="tool_touch" site="tool_touch"/>
+  </sensor>
+
+  <keyframe>
+    <key name="home" qpos="0 0 0 -1.57079 0 1.57079 -0.7853"/>
+  </keyframe>
+</mujoco>

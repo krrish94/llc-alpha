@@ -1,0 +1,65 @@
+{
+  "path": "research/reports/18-handoff/media/blocked_soft_025x.mp4",
+  "record": "research/reports/18-handoff/media/blocked_soft_025x.json",
+  "frames": 1447,
+  "fps": 50,
+  "speed": 0.25,
+  "duration_s": 28.94,
+  "width": 1520,
+  "height": 750,
+  "resolution": [
+    1520,
+    750
+  ],
+  "view_size": [
+    480,
+    360
+  ],
+  "camera": "detail",
+  "title": "Blocked target on a 500 N/m surface (held out), case blocked-test-k500-000",
+  "plot_series": [
+    "pos_err",
+    "f_normal",
+    "tau2"
+  ],
+  "t_start": 0.0,
+  "t_end": 7.23,
+  "sample_step": 5,
+  "sample_rate_hz": 1000.0,
+  "posters": {
+    "first": "research/reports/18-handoff/media/blocked_soft_025x-first.png",
+    "middle": "research/reports/18-handoff/media/blocked_soft_025x-middle.png",
+    "last": "research/reports/18-handoff/media/blocked_soft_025x-last.png"
+  },
+  "episodes": [
+    {
+      "method": "pd_shared_cap",
+      "label": "PD, cap-tuned",
+      "npz": "runs/m10r2/episodes_handoff/surface_500__blocked-test-k500-000__pd_shared_cap.npz",
+      "sha256": "bd61f6d8f0058bf3a95e006487be025a2735742aa4c832e7461f2241644d9475",
+      "joint_rmse_mrad": 24.005416191706484,
+      "peak_normal_force_n": 42.159526197135015
+    },
+    {
+      "method": "oracle_pd",
+      "label": "Oracle (privileged ceiling)",
+      "npz": "runs/m10r2/episodes_handoff/surface_500__blocked-test-k500-000__oracle_pd.npz",
+      "sha256": "bebde764c218b3c8fab834f9e3bc793caa6b2ca5f7c3e9d5f7b052ed29e54ef7",
+      "joint_rmse_mrad": 19.866075069124545,
+      "peak_normal_force_n": 38.61175552401694
+    },
+    {
+      "method": "distill_two",
+      "label": "Two-teacher student (seed 0)",
+      "npz": "runs/m10r2/episodes_handoff/surface_500__blocked-test-k500-000__distill_two-s0.npz",
+      "sha256": "d8b801a79e555e0b4b60fa1da622da25b0a6b4f3dbcbaca9383004d8fc729a3d",
+      "joint_rmse_mrad": 14.128023245064727,
+      "peak_normal_force_n": 27.064881570011313
+    }
+  ],
+  "reference": "gray sphere: commanded tool position, q_ref through llc.sim.nominal.NominalModel",
+  "trace": "measured tool path over the last 0.5 s, gray (old) to method color (new)",
+  "metrics": "joint RMSE over all joints and samples from t = 0 to the displayed time (mrad); peak normal force so far (N)",
+  "scene": "llc/sim/assets/panda_2f85_0800.xml",
+  "render_seconds": 24.75
+}

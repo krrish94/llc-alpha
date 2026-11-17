@@ -1,0 +1,242 @@
+<h2>Summary</h2>
+<p>We study whether the low-level feedback controller of a torque-controlled manipulator, the loop that turns position targets into motor torques at 1 kHz, should be learned rather than hand-tuned. On a simulated Franka Panda with randomized link parameters, payloads and sensor noise, a learned controller that adds a bounded neural residual to a tuned PD, with only 100 ms of proprioceptive history as input, tracks position targets more accurately than the tuned PD in every family of references we test and limits contact forces far better when the targets run into a surface: position RMSE 13.4 against 19.1 mrad in free motion, settling time 0.39 against 0.66 s on steps, sustained peak force 18 against 65 N on a held-out task sequence. These advantages hold under a shifted workspace, references twice as fast, a 3 kg payload and robot instances with doubled parameter deviations, none of which were used for training, tuning or selection. A reinforcement-learning variant trained on contact pushes the force reductions further at some cost in free-space smoothness.</p>
+<p>The learned controllers are not better everywhere. They do not press to a target force when asked, they push as hard as the PD when a target is blocked, and they lose contact more often during a press. We have made the wanted behaviour on a blocked target explicit, stop at the surface and wait without unnecessary force, measure it, and show that no controller does it yet. That is the open problem the next phase addresses.</p>
+
+<h2>1. Motivation</h2>
+<p>Almost every robot closes its lowest control loop with a PD law: a stiffness times the position error plus a damping times the velocity error, often with gravity and Coriolis compensation, at 100 Hz to 1 kHz. The gains are tuned once, by hand, for a broad range of tasks. Four observations motivate learning this loop instead.</p>
+<ol>
+<li>There is no universal gain set. The gains that track a fast free-space motion well are too stiff for a press against a surface; the gains that make contact gentle track poorly; and both change with the payload, with the robot instance and within a task as the contact mode changes.</li>
+<li>Policies above the controller treat it as a black box. Much of the jerky or unstable behaviour of well-trained policies in distribution comes from the controller below them: its response depends on payload, dynamics, system identification and contact in ways the policy never sees.</li>
+<li>Hand-tuning per scenario does not scale, and switching between gain sets stably is itself a control problem.</li>
+<li>A controller learned with a proprioceptive history has a small sim-to-real gap: its inputs are joint positions, velocities and commanded torques, which every torque-controlled arm provides.</li>
+</ol>
+<p>The research question is therefore: can a learned feedback controller be <em>versatile</em>, better than a tuned PD across free motion, policy-like targets and contact, on robots it has not seen, with contact forces that are safe to execute on hardware?</p>
+
+<h2>2. The plant and the controllers</h2>
+<p><strong>Plant.</strong> A 7-joint Franka Panda in MuJoCo, torque-controlled at 1 kHz, with a spherical tool, a table and a wall. Every training window and every evaluation case draws a robot instance (link masses, inertias, joint friction and damping perturbed around the nominal model), a payload at the tool (0 to 3 kg in training, 0 to 2 kg in the test families, 3 kg as a held-out group) and sensor noise on the joint positions. The controller never sees the instance, the payload or any force sensor.</p>
+<p><strong>Controllers.</strong> The reference is a PD with gravity compensation whose seven stiffness and damping pairs were tuned by direct search on the protocol's tuning split (stiffness 47 to 395 Nm/rad, damping ratio 0.69). The learned controllers are torque laws of the same signals. We studied three parameterisations: learned gains, PD plus a learned residual torque, and a fully neural torque; and three ways to train them: gradients through the simulator, gradients through a learned dynamics model, and reinforcement learning. The controller featured here is <em>PD plus residual</em>: the tuned PD plus a residual bounded to half the torque limit, from a two-layer network (128 units, 134 k parameters) that sees the current position, velocity and target, and a history of positions, velocities and commanded torques over the last 100 ms at 10 ms spacing and the last 32 ms at 1 ms spacing. It was trained in the simulator by a short-horizon actor-critic method through finite-difference plant gradients (500 iterations of 24 windows of 2 s), with a critic that sees privileged quantities (contact force, payload, a reference preview) during training only. The reinforcement-learning variant fine-tunes the same network with PPO on windows of the contact families.</p>
+
+<h2>3. Protocol: what is measured and what is wanted</h2>
+<p>Seven families of references, each with its own metrics and its own definition of the wanted behaviour, scored on 16 test cases per family under paired comparisons with bootstrap confidence intervals. Composites exist for tuning and selection only; every claim below rests on the primary metrics of a family.</p>
+<table>
+<caption>Protocol v2 families: 16 test cases per family drawn from a split disjoint from training and validation; every case has its own robot instance (link masses, inertias, friction and damping perturbed), payload (0 to 2 kg) and sensor noise. Held-out groups repeat the families under a shifted workspace, references 1.5 and 2 times faster, a 3 kg payload, and robot instances with doubled deviations.</caption>
+<thead>
+<tr><th>Family</th><th>Reference</th><th>Primary metrics</th><th>Wanted behaviour</th></tr>
+</thead>
+<tbody>
+<tr><td>Hold with pulses</td><td>hold a fixed posture; a 10 N force pulse of 0.2 s hits the tool</td><td>position RMSE, deflection under the pulse, torque-rate RMS</td><td>small error and deflection, smooth torques</td></tr>
+<tr><td>Free motion</td><td>smooth joint-space motions through the workspace</td><td>position RMSE, torque-rate RMS</td><td>tight tracking, smooth torques</td></tr>
+<tr><td>Policy-like targets</td><td>piecewise-constant targets changing every 20 ms, as a learned policy emits them</td><td>position RMSE, torque-rate RMS</td><td>track the staircase without excess chatter</td></tr>
+<tr><td>Step targets</td><td>joint-space steps</td><td>position RMSE, settling time, overshoot</td><td>fast settling without overshoot</td></tr>
+<tr><td>Press and slide</td><td>approach a table or wall at speed, press 0.5 to 3 cm into it, slide, release</td><td>excess force above 15 N, sustained peak (20 ms), feasible-direction error, press deficit below 5 N, contact losses per second</td><td>bounded forces, a maintained press, tracking along the surface</td></tr>
+<tr><td>Blocked target</td><td>the target passes 3 to 8 cm through a table or wall and comes back</td><td>excess force above 15 N, sustained peak, tangential drift from the contact point, motion while blocked, apparent stiffness, recovery after release</td><td>stop at the surface and wait with a capped force, resume promptly</td></tr>
+<tr><td>Task (held out)</td><td>reach, descend, press 1 cm, slide 10 cm, lift, transport, press 0.5 cm, lift; never trained on</td><td>excess force, sustained peak, feasible-direction error, press deficit</td><td>the contact behaviour of the two families above, in sequence</td></tr>
+</tbody>
+</table>
+
+<h2>4. First evidence: learned controllers outperform the tuned PD</h2>
+<p>The first figure summarises the comparison on the in-distribution families; the table gives the numbers; the second figure shows that the same advantages hold under every held-out condition; the traces and the clips show what the controllers do.</p>
+<figure id="fig-hero" class="wide">
+<img src="figures/hero.svg" alt="Relative change of two learned controllers against the tuned PD on the in-distribution families (16 cases per family; mean over cases). Every metric shown is lower-is-better, so bars to the left are improvements. The first eight rows are the headline wins (tracking and force limitation); the last four are where learned controllers lose (pressing to a target, keeping contact, recovering after a block). Not significant (n.s.): the 95% bootstrap interval of the paired difference includes zero. Symmetric log axis beyond 50%.">
+<figcaption>Relative change of two learned controllers against the tuned PD on the in-distribution families (16 cases per family; mean over cases). Every metric shown is lower-is-better, so bars to the left are improvements. The first eight rows are the headline wins (tracking and force limitation); the last four are where learned controllers lose (pressing to a target, keeping contact, recovering after a block). Not significant (n.s.): the 95% bootstrap interval of the paired difference includes zero. Symmetric log axis beyond 50%.</figcaption>
+</figure><table>
+<caption>Headline numbers behind the first figure: means over the 16 in-distribution cases of each family; a star marks a paired difference against the PD whose 95% bootstrap interval excludes zero. Lower is better throughout.</caption>
+<thead>
+<tr><th>Family</th><th>Metric</th><th class="num">PD, shared gains</th><th class="num">PD + learned residual</th><th class="num">PPO, contact families</th></tr>
+</thead>
+<tbody>
+<tr><td>Hold, 10 N pulses</td><td>Position RMSE (mrad)</td><td class="num">16.7</td><td class="num">6.13*</td><td class="num">6.28*</td></tr>
+<tr><td>Free motion</td><td>Position RMSE (mrad)</td><td class="num">19.1</td><td class="num">13.4*</td><td class="num">26.3*</td></tr>
+<tr><td>Policy-like targets</td><td>Position RMSE (mrad)</td><td class="num">55.3</td><td class="num">47*</td><td class="num">57</td></tr>
+<tr><td>Step targets</td><td>Settling time after step (s)</td><td class="num">0.663</td><td class="num">0.391*</td><td class="num">0.565</td></tr>
+<tr><td>Press and slide</td><td>Peak of the 20 ms low-pass filtered normal force (N)</td><td class="num">88.8</td><td class="num">60.4*</td><td class="num">32.4*</td></tr>
+<tr><td>Press and slide</td><td>Excess contact force above the 15 N cap (N)</td><td class="num">16.1</td><td class="num">12.5</td><td class="num">8.21*</td></tr>
+<tr><td>Task (held out)</td><td>Peak of the 20 ms low-pass filtered normal force (N)</td><td class="num">64.7</td><td class="num">17.5*</td><td class="num">9.91*</td></tr>
+<tr><td>Task (held out)</td><td>Excess contact force above the 15 N cap (N)</td><td class="num">10.7</td><td class="num">2.15*</td><td class="num">1.24*</td></tr>
+<tr><td>Blocked target</td><td>Excess contact force above the 15 N cap (N)</td><td class="num">45.6</td><td class="num">57.2*</td><td class="num">41.4</td></tr>
+<tr><td>Blocked target</td><td>Recovery after a blocked reference returns (s)</td><td class="num">0.367</td><td class="num">0.668</td><td class="num">0.699</td></tr>
+<tr><td>Task (held out)</td><td>Press-phase force deficit below 5 N (N)</td><td class="num">0.244</td><td class="num">1.45*</td><td class="num">2.55*</td></tr>
+<tr><td>Press and slide</td><td>Contact losses of 5 ms or more per second of press phase (1/s)</td><td class="num">4.33</td><td class="num">8.58</td><td class="num">13.6*</td></tr>
+</tbody>
+</table><figure id="fig-groups" class="wide">
+<img src="figures/groups.svg" alt="The same advantage under every held-out condition: tracking error in free motion (left) and sustained peak contact force (right) for the tuned PD and two learned controllers, in distribution and under a held-out workspace, faster references, a 3 kg payload and robot instances with doubled parameter deviations. None of these conditions was used for tuning or selection.">
+<figcaption>The same advantage under every held-out condition: tracking error in free motion (left) and sustained peak contact force (right) for the tuned PD and two learned controllers, in distribution and under a held-out workspace, faster references, a 3 kg payload and robot instances with doubled parameter deviations. None of these conditions was used for tuning or selection.</figcaption>
+</figure><figure id="fig-traces" class="wide">
+<img src="figures/traces.svg" alt="Representative episodes (median composite case of the PD per family). Top: normal contact force; the dashed line is the 15 N cap. Bottom: largest joint tracking error. The learned controllers keep the contact force low on the press-and-slide and task cases and track more tightly in free space; on the blocked target all three push hard against the surface.">
+<figcaption>Representative episodes (median composite case of the PD per family). Top: normal contact force; the dashed line is the 15 N cap. Bottom: largest joint tracking error. The learned controllers keep the contact force low on the press-and-slide and task cases and track more tightly in free space; on the blocked target all three push hard against the surface.</figcaption>
+</figure><p>Clips of the same three controllers on representative cases (the gray sphere is the commanded tool position; the plots accumulate as the clip plays).</p>
+<figure class="video wide" id="fig-video-hold_100x">
+<video id="fig-video-hold_100x-video" controls preload="metadata" poster="media/hold_100x-middle.png">
+<source src="media/hold_100x.mp4" type="video/mp4">
+<p class="missing">Video playback is not supported here; <a href="media/hold_100x.mp4">download the video (MP4)</a>.</p>
+</video>
+<div class="widget timeseries" data-widget="timeseries" data-src="data/ts_hold.json" data-video="fig-video-hold_100x-video" data-video-speed="1">
+<div class="widget-body">
+<p class="missing">No static figure for this viewer; the interactive view needs JavaScript.</p>
+</div>
+</div>
+<figcaption>Hold: representative case hold-test-003 (median composite of the shared PD) at 1x; the gray sphere is the commanded tool position, metrics accumulate causally; the plot cursor follows the video. <a class="source" href="media/hold_100x.mp4">Video (MP4)</a> <a class="source" href="data/ts_hold.json">Data (JSON)</a></figcaption>
+</figure>
+<figure class="video wide" id="fig-video-contact2_100x">
+<video id="fig-video-contact2_100x-video" controls preload="metadata" poster="media/contact2_100x-middle.png">
+<source src="media/contact2_100x.mp4" type="video/mp4">
+<p class="missing">Video playback is not supported here; <a href="media/contact2_100x.mp4">download the video (MP4)</a>.</p>
+</video>
+<div class="widget timeseries" data-widget="timeseries" data-src="data/ts_contact2.json" data-video="fig-video-contact2_100x-video" data-video-speed="1">
+<div class="widget-body">
+<p class="missing">No static figure for this viewer; the interactive view needs JavaScript.</p>
+</div>
+</div>
+<figcaption>Contact: representative case contact2-test-000 (median composite of the shared PD) at 1x; the gray sphere is the commanded tool position, metrics accumulate causally; the plot cursor follows the video. <a class="source" href="media/contact2_100x.mp4">Video (MP4)</a> <a class="source" href="data/ts_contact2.json">Data (JSON)</a></figcaption>
+</figure>
+<figure class="video wide" id="fig-video-blocked_100x">
+<video id="fig-video-blocked_100x-video" controls preload="metadata" poster="media/blocked_100x-middle.png">
+<source src="media/blocked_100x.mp4" type="video/mp4">
+<p class="missing">Video playback is not supported here; <a href="media/blocked_100x.mp4">download the video (MP4)</a>.</p>
+</video>
+<div class="widget timeseries" data-widget="timeseries" data-src="data/ts_blocked.json" data-video="fig-video-blocked_100x-video" data-video-speed="1">
+<div class="widget-body">
+<p class="missing">No static figure for this viewer; the interactive view needs JavaScript.</p>
+</div>
+</div>
+<figcaption>Blocked reference: representative case blocked-test-006 (median composite of the shared PD) at 1x; the gray sphere is the commanded tool position, metrics accumulate causally; the plot cursor follows the video. <a class="source" href="media/blocked_100x.mp4">Video (MP4)</a> <a class="source" href="data/ts_blocked.json">Data (JSON)</a></figcaption>
+</figure>
+<figure class="video wide" id="fig-video-task_100x">
+<video id="fig-video-task_100x-video" controls preload="metadata" poster="media/task_100x-middle.png">
+<source src="media/task_100x.mp4" type="video/mp4">
+<p class="missing">Video playback is not supported here; <a href="media/task_100x.mp4">download the video (MP4)</a>.</p>
+</video>
+<div class="widget timeseries" data-widget="timeseries" data-src="data/ts_task.json" data-video="fig-video-task_100x-video" data-video-speed="1">
+<div class="widget-body">
+<p class="missing">No static figure for this viewer; the interactive view needs JavaScript.</p>
+</div>
+</div>
+<figcaption>Task sequence: representative case task-test-013 (median composite of the shared PD) at 1x; the gray sphere is the commanded tool position, metrics accumulate causally; the plot cursor follows the video. <a class="source" href="media/task_100x.mp4">Video (MP4)</a> <a class="source" href="data/ts_task.json">Data (JSON)</a></figcaption>
+</figure>
+
+<h2>5. Where they lose</h2>
+<p>The same tables show three consistent losses. (1) <em>Pressing to a target.</em> When the task family asks for a 1 cm press, the learned controllers press lightly and intermittently: the press deficit is several times the PD's. (2) <em>Blocked targets.</em> When the reference passes through a surface, every controller, learned or not, keeps pushing with the force its stiffness implies; the residual pushes as hard as the PD. (3) <em>Keeping contact.</em> During a press the learned controllers lose contact for 5 to 10 ms several times a second: a learned flinch at the reward's force limit, where the PD base spring pushes the tool back in. The reinforcement-learning variant trades more of (1) and (3) for lower forces. These are the behaviours that make a controller <em>compliant</em> rather than merely accurate, and they are the subject of the current deep dive.</p>
+<table class="wide">
+<caption>Every (group, family, metric) with a significant paired difference against the PD, for the learned residual and the contact-family PPO arm (16 cases per family and group). Relative change in parentheses; rows at parity are omitted. This is the complete record behind the summary above.</caption>
+<thead>
+<tr><th>Group</th><th>Family</th><th>Metric</th><th class="num">Reference</th><th>Significantly better</th><th>Significantly worse</th></tr>
+</thead>
+<tbody>
+<tr><td>In-distribution families</td><td>Hold (10 N pulses)</td><td>Position RMSE (rad)</td><td class="num">0.0167</td><td>residual: 0.00613 (-63%); PPO contact: 0.00628 (-62%)</td><td>—</td></tr>
+<tr><td>In-distribution families</td><td>Hold (10 N pulses)</td><td>Peak deflection under 10 N pulse (m)</td><td class="num">0.016</td><td>residual: 0.0118 (-26%)</td><td>—</td></tr>
+<tr><td>In-distribution families</td><td>Hold (10 N pulses)</td><td>Torque rate RMS (Nm/s)</td><td class="num">48.7</td><td>residual: 43.4 (-11%)</td><td>PPO contact: 73.4 (+51%)</td></tr>
+<tr><td>In-distribution families</td><td>Free motion</td><td>Position RMSE (rad)</td><td class="num">0.0191</td><td>residual: 0.0134 (-30%)</td><td>PPO contact: 0.0263 (+38%)</td></tr>
+<tr><td>In-distribution families</td><td>Free motion</td><td>Torque rate RMS (Nm/s)</td><td class="num">52.9</td><td>residual: 44.5 (-16%)</td><td>PPO contact: 80.3 (+52%)</td></tr>
+<tr><td>In-distribution families</td><td>Policy-like targets</td><td>Position RMSE (rad)</td><td class="num">0.0553</td><td>residual: 0.047 (-15%)</td><td>—</td></tr>
+<tr><td>In-distribution families</td><td>Policy-like targets</td><td>Torque rate RMS (Nm/s)</td><td class="num">1.77e+03</td><td>residual: 1.57e+03 (-11%); PPO contact: 1.71e+03 (-3%)</td><td>—</td></tr>
+<tr><td>In-distribution families</td><td>Step targets</td><td>Position RMSE (rad)</td><td class="num">0.0444</td><td>residual: 0.0382 (-14%); PPO contact: 0.041 (-8%)</td><td>—</td></tr>
+<tr><td>In-distribution families</td><td>Step targets</td><td>Settling time after step (s)</td><td class="num">0.663</td><td>residual: 0.391 (-41%)</td><td>—</td></tr>
+<tr><td>In-distribution families</td><td>Step targets</td><td>Step overshoot (-)</td><td class="num">0.0176</td><td>PPO contact: 0.00746 (-58%)</td><td>—</td></tr>
+<tr><td>In-distribution families</td><td>Contact (press, slide)</td><td>Excess contact force above 30 N (mean while in contact) (N)</td><td class="num">8.95</td><td>residual: 5.62 (-37%); PPO contact: 3.54 (-61%)</td><td>—</td></tr>
+<tr><td>In-distribution families</td><td>Contact (press, slide)</td><td>Excess contact force above the 15 N cap (mean while in contact) (N)</td><td class="num">16.1</td><td>PPO contact: 8.21 (-49%)</td><td>—</td></tr>
+<tr><td>In-distribution families</td><td>Contact (press, slide)</td><td>Peak normal force (N)</td><td class="num">169</td><td>residual: 106 (-37%); PPO contact: 56.2 (-67%)</td><td>—</td></tr>
+<tr><td>In-distribution families</td><td>Contact (press, slide)</td><td>Peak of the 20 ms low-pass filtered normal force (sustained force) (N)</td><td class="num">88.8</td><td>residual: 60.4 (-32%); PPO contact: 32.4 (-64%)</td><td>—</td></tr>
+<tr><td>In-distribution families</td><td>Contact (press, slide)</td><td>Feasible-direction tool error (m)</td><td class="num">0.0403</td><td>residual: 0.0222 (-45%)</td><td>—</td></tr>
+<tr><td>In-distribution families</td><td>Contact (press, slide)</td><td>Press-phase force deficit below 5 N (N)</td><td class="num">1.39</td><td>residual: 0.333 (-76%)</td><td>—</td></tr>
+<tr><td>In-distribution families</td><td>Contact (press, slide)</td><td>Contact losses of 5 ms or more during contact phase (-)</td><td class="num">9.5</td><td>—</td><td>PPO contact: 34.1 (+259%)</td></tr>
+<tr><td>In-distribution families</td><td>Contact (press, slide)</td><td>Contact losses of 5 ms or more per second of press phase (1/s)</td><td class="num">4.33</td><td>—</td><td>PPO contact: 13.6 (+215%)</td></tr>
+<tr><td>In-distribution families</td><td>Blocked target</td><td>Excess contact force above 30 N (mean while in contact) (N)</td><td class="num">32.7</td><td>PPO contact: 27.8 (-15%)</td><td>residual: 43 (+31%)</td></tr>
+<tr><td>In-distribution families</td><td>Blocked target</td><td>Excess contact force above the 15 N cap (mean while in contact) (N)</td><td class="num">45.6</td><td>—</td><td>residual: 57.2 (+25%)</td></tr>
+<tr><td>In-distribution families</td><td>Blocked target</td><td>Peak normal force (N)</td><td class="num">134</td><td>PPO contact: 99.8 (-26%)</td><td>—</td></tr>
+<tr><td>In-distribution families</td><td>Blocked target</td><td>Peak of the 20 ms low-pass filtered normal force (sustained force) (N)</td><td class="num">90.4</td><td>PPO contact: 73.1 (-19%)</td><td>—</td></tr>
+<tr><td>In-distribution families</td><td>Blocked target</td><td>Apparent stiffness: mean normal force per metre of reference depth while blocked (after the first 0.3 s of contact) (N/m)</td><td class="num">1.18e+03</td><td>—</td><td>residual: 1.44e+03 (+22%)</td></tr>
+<tr><td>In-distribution families</td><td>Blocked target</td><td>Feasible-direction tool error (m)</td><td class="num">0.0376</td><td>residual: 0.0228 (-39%)</td><td>—</td></tr>
+<tr><td>In-distribution families</td><td>Task (held out)</td><td>Excess contact force above 30 N (mean while in contact) (N)</td><td class="num">3.86</td><td>residual: 0.171 (-96%); PPO contact: 0.0352 (-99%)</td><td>—</td></tr>
+<tr><td>In-distribution families</td><td>Task (held out)</td><td>Excess contact force above the 15 N cap (mean while in contact) (N)</td><td class="num">10.7</td><td>residual: 2.15 (-80%); PPO contact: 1.24 (-88%)</td><td>—</td></tr>
+<tr><td>In-distribution families</td><td>Task (held out)</td><td>Peak normal force (N)</td><td class="num">123</td><td>residual: 36.5 (-70%); PPO contact: 21.6 (-82%)</td><td>—</td></tr>
+<tr><td>In-distribution families</td><td>Task (held out)</td><td>Peak of the 20 ms low-pass filtered normal force (sustained force) (N)</td><td class="num">64.7</td><td>residual: 17.5 (-73%); PPO contact: 9.91 (-85%)</td><td>—</td></tr>
+<tr><td>In-distribution families</td><td>Task (held out)</td><td>Feasible-direction tool error (m)</td><td class="num">0.0241</td><td>residual: 0.014 (-42%)</td><td>—</td></tr>
+<tr><td>In-distribution families</td><td>Task (held out)</td><td>Press-phase force deficit below 5 N (N)</td><td class="num">0.244</td><td>—</td><td>residual: 1.45 (+493%); PPO contact: 2.55 (+943%)</td></tr>
+<tr><td>Held-out workspace (base yaw 1.2 to 2.6 rad)</td><td>Free motion</td><td>Position RMSE (rad)</td><td class="num">0.0263</td><td>residual: 0.0146 (-44%)</td><td>—</td></tr>
+<tr><td>Held-out workspace (base yaw 1.2 to 2.6 rad)</td><td>Free motion</td><td>Torque rate RMS (Nm/s)</td><td class="num">54.7</td><td>residual: 46.1 (-16%)</td><td>PPO contact: 74.2 (+36%)</td></tr>
+<tr><td>Held-out workspace (base yaw 1.2 to 2.6 rad)</td><td>Policy-like targets</td><td>Position RMSE (rad)</td><td class="num">0.0572</td><td>residual: 0.0518 (-9%)</td><td>—</td></tr>
+<tr><td>Held-out workspace (base yaw 1.2 to 2.6 rad)</td><td>Policy-like targets</td><td>Torque rate RMS (Nm/s)</td><td class="num">1.82e+03</td><td>residual: 1.62e+03 (-11%)</td><td>—</td></tr>
+<tr><td>Speed x1.5</td><td>Free motion</td><td>Position RMSE (rad)</td><td class="num">0.0248</td><td>residual: 0.0189 (-24%)</td><td>PPO contact: 0.0334 (+34%)</td></tr>
+<tr><td>Speed x1.5</td><td>Free motion</td><td>Torque rate RMS (Nm/s)</td><td class="num">63.4</td><td>—</td><td>PPO contact: 123 (+94%)</td></tr>
+<tr><td>Speed x1.5</td><td>Policy-like targets</td><td>Position RMSE (rad)</td><td class="num">0.0777</td><td>residual: 0.0654 (-16%)</td><td>—</td></tr>
+<tr><td>Speed x1.5</td><td>Policy-like targets</td><td>Torque rate RMS (Nm/s)</td><td class="num">1.95e+03</td><td>residual: 1.72e+03 (-12%); PPO contact: 1.85e+03 (-5%)</td><td>—</td></tr>
+<tr><td>Speed x1.5</td><td>Contact (press, slide)</td><td>Excess contact force above 30 N (mean while in contact) (N)</td><td class="num">8.14</td><td>residual: 3.14 (-61%); PPO contact: 1.32 (-84%)</td><td>—</td></tr>
+<tr><td>Speed x1.5</td><td>Contact (press, slide)</td><td>Excess contact force above the 15 N cap (mean while in contact) (N)</td><td class="num">14.5</td><td>residual: 10 (-31%); PPO contact: 5.57 (-62%)</td><td>—</td></tr>
+<tr><td>Speed x1.5</td><td>Contact (press, slide)</td><td>Peak normal force (N)</td><td class="num">295</td><td>residual: 156 (-47%); PPO contact: 62.9 (-79%)</td><td>—</td></tr>
+<tr><td>Speed x1.5</td><td>Contact (press, slide)</td><td>Peak of the 20 ms low-pass filtered normal force (sustained force) (N)</td><td class="num">136</td><td>residual: 78.8 (-42%); PPO contact: 29.8 (-78%)</td><td>—</td></tr>
+<tr><td>Speed x1.5</td><td>Task (held out)</td><td>Excess contact force above 30 N (mean while in contact) (N)</td><td class="num">5.47</td><td>residual: 0.613 (-89%); PPO contact: 0.186 (-97%)</td><td>—</td></tr>
+<tr><td>Speed x1.5</td><td>Task (held out)</td><td>Excess contact force above the 15 N cap (mean while in contact) (N)</td><td class="num">13.1</td><td>residual: 2.45 (-81%); PPO contact: 1.22 (-91%)</td><td>—</td></tr>
+<tr><td>Speed x1.5</td><td>Task (held out)</td><td>Peak normal force (N)</td><td class="num">298</td><td>residual: 61.2 (-79%); PPO contact: 28.3 (-90%)</td><td>—</td></tr>
+<tr><td>Speed x1.5</td><td>Task (held out)</td><td>Peak of the 20 ms low-pass filtered normal force (sustained force) (N)</td><td class="num">129</td><td>residual: 28 (-78%); PPO contact: 10.2 (-92%)</td><td>—</td></tr>
+<tr><td>Speed x1.5</td><td>Task (held out)</td><td>Feasible-direction tool error (m)</td><td class="num">0.0267</td><td>residual: 0.0156 (-42%)</td><td>—</td></tr>
+<tr><td>Speed x1.5</td><td>Task (held out)</td><td>Press-phase force deficit below 5 N (N)</td><td class="num">0</td><td>—</td><td>PPO contact: 2.07 (+206537082108%)</td></tr>
+<tr><td>Speed x1.5</td><td>Task (held out)</td><td>Contact losses of 5 ms or more per second of press phase (1/s)</td><td class="num">14.3</td><td>—</td><td>residual: 21.3 (+48%)</td></tr>
+<tr><td>Speed x2</td><td>Free motion</td><td>Position RMSE (rad)</td><td class="num">0.0326</td><td>residual: 0.0264 (-19%)</td><td>PPO contact: 0.0399 (+22%)</td></tr>
+<tr><td>Speed x2</td><td>Free motion</td><td>Torque rate RMS (Nm/s)</td><td class="num">92.6</td><td>—</td><td>PPO contact: 181 (+96%)</td></tr>
+<tr><td>Speed x2</td><td>Policy-like targets</td><td>Position RMSE (rad)</td><td class="num">0.0975</td><td>residual: 0.0827 (-15%)</td><td>—</td></tr>
+<tr><td>Speed x2</td><td>Policy-like targets</td><td>Torque rate RMS (Nm/s)</td><td class="num">1.99e+03</td><td>residual: 1.76e+03 (-12%); PPO contact: 1.89e+03 (-5%)</td><td>—</td></tr>
+<tr><td>Speed x2</td><td>Contact (press, slide)</td><td>Excess contact force above 30 N (mean while in contact) (N)</td><td class="num">9.4</td><td>residual: 3.69 (-61%); PPO contact: 2.27 (-76%)</td><td>—</td></tr>
+<tr><td>Speed x2</td><td>Contact (press, slide)</td><td>Excess contact force above the 15 N cap (mean while in contact) (N)</td><td class="num">16.3</td><td>residual: 10.1 (-38%); PPO contact: 6.8 (-58%)</td><td>—</td></tr>
+<tr><td>Speed x2</td><td>Contact (press, slide)</td><td>Peak normal force (N)</td><td class="num">356</td><td>residual: 156 (-56%); PPO contact: 53.3 (-85%)</td><td>—</td></tr>
+<tr><td>Speed x2</td><td>Contact (press, slide)</td><td>Peak of the 20 ms low-pass filtered normal force (sustained force) (N)</td><td class="num">161</td><td>residual: 74.3 (-54%); PPO contact: 20.4 (-87%)</td><td>—</td></tr>
+<tr><td>Speed x2</td><td>Task (held out)</td><td>Excess contact force above 30 N (mean while in contact) (N)</td><td class="num">7.35</td><td>residual: 1.08 (-85%); PPO contact: 0.425 (-94%)</td><td>—</td></tr>
+<tr><td>Speed x2</td><td>Task (held out)</td><td>Excess contact force above the 15 N cap (mean while in contact) (N)</td><td class="num">13.8</td><td>residual: 2.62 (-81%); PPO contact: 1.31 (-91%)</td><td>—</td></tr>
+<tr><td>Speed x2</td><td>Task (held out)</td><td>Peak normal force (N)</td><td class="num">360</td><td>residual: 53.9 (-85%); PPO contact: 26 (-93%)</td><td>—</td></tr>
+<tr><td>Speed x2</td><td>Task (held out)</td><td>Peak of the 20 ms low-pass filtered normal force (sustained force) (N)</td><td class="num">138</td><td>residual: 27.3 (-80%); PPO contact: 8.79 (-94%)</td><td>—</td></tr>
+<tr><td>Speed x2</td><td>Task (held out)</td><td>Press-phase force deficit below 5 N (N)</td><td class="num">0.451</td><td>—</td><td>residual: 2.49 (+452%); PPO contact: 2.5 (+454%)</td></tr>
+<tr><td>Payload 3 kg</td><td>Free motion</td><td>Position RMSE (rad)</td><td class="num">0.0486</td><td>residual: 0.0239 (-51%); PPO contact: 0.0336 (-31%)</td><td>—</td></tr>
+<tr><td>Payload 3 kg</td><td>Free motion</td><td>Torque rate RMS (Nm/s)</td><td class="num">58</td><td>residual: 47.2 (-19%)</td><td>PPO contact: 88.1 (+52%)</td></tr>
+<tr><td>Payload 3 kg</td><td>Contact (press, slide)</td><td>Excess contact force above 30 N (mean while in contact) (N)</td><td class="num">11.6</td><td>residual: 5.97 (-49%)</td><td>—</td></tr>
+<tr><td>Payload 3 kg</td><td>Contact (press, slide)</td><td>Peak normal force (N)</td><td class="num">292</td><td>residual: 152 (-48%); PPO contact: 71.5 (-76%)</td><td>—</td></tr>
+<tr><td>Payload 3 kg</td><td>Contact (press, slide)</td><td>Peak of the 20 ms low-pass filtered normal force (sustained force) (N)</td><td class="num">136</td><td>residual: 81.2 (-40%); PPO contact: 40 (-71%)</td><td>—</td></tr>
+<tr><td>Payload 3 kg</td><td>Contact (press, slide)</td><td>Feasible-direction tool error (m)</td><td class="num">0.0502</td><td>residual: 0.0233 (-54%)</td><td>—</td></tr>
+<tr><td>Payload 3 kg</td><td>Blocked target</td><td>Excess contact force above 30 N (mean while in contact) (N)</td><td class="num">46.3</td><td>residual: 35 (-24%); PPO contact: 24.6 (-47%)</td><td>—</td></tr>
+<tr><td>Payload 3 kg</td><td>Blocked target</td><td>Recovery after a blocked reference returns (s)</td><td class="num">1.57</td><td>residual: 0.639 (-59%)</td><td>—</td></tr>
+<tr><td>Payload 3 kg</td><td>Blocked target</td><td>Feasible-direction tool error (m)</td><td class="num">0.0847</td><td>residual: 0.0254 (-70%); PPO contact: 0.032 (-62%)</td><td>—</td></tr>
+<tr><td>Payload 3 kg</td><td>Task (held out)</td><td>Excess contact force above 30 N (mean while in contact) (N)</td><td class="num">18.2</td><td>residual: 1.01 (-94%); PPO contact: 0.376 (-98%)</td><td>—</td></tr>
+<tr><td>Payload 3 kg</td><td>Task (held out)</td><td>Excess contact force above the 15 N cap (mean while in contact) (N)</td><td class="num">29.8</td><td>residual: 11 (-63%); PPO contact: 7.55 (-75%)</td><td>—</td></tr>
+<tr><td>Payload 3 kg</td><td>Task (held out)</td><td>Peak normal force (N)</td><td class="num">297</td><td>residual: 68.6 (-77%); PPO contact: 54.7 (-82%)</td><td>—</td></tr>
+<tr><td>Payload 3 kg</td><td>Task (held out)</td><td>Peak of the 20 ms low-pass filtered normal force (sustained force) (N)</td><td class="num">140</td><td>residual: 34.9 (-75%); PPO contact: 28.7 (-79%)</td><td>—</td></tr>
+<tr><td>Payload 3 kg</td><td>Task (held out)</td><td>Feasible-direction tool error (m)</td><td class="num">0.0636</td><td>residual: 0.0179 (-72%); PPO contact: 0.024 (-62%)</td><td>—</td></tr>
+<tr><td>Payload 3 kg</td><td>Task (held out)</td><td>Contact losses of 5 ms or more per second of press phase (1/s)</td><td class="num">0</td><td>—</td><td>residual: 1.48 (+148064949314%)</td></tr>
+<tr><td>Held-out robot instances (doubled deviations)</td><td>Free motion</td><td>Position RMSE (rad)</td><td class="num">0.0184</td><td>—</td><td>PPO contact: 0.027 (+47%)</td></tr>
+<tr><td>Held-out robot instances (doubled deviations)</td><td>Free motion</td><td>Torque rate RMS (Nm/s)</td><td class="num">51.5</td><td>residual: 43.7 (-15%)</td><td>PPO contact: 81.6 (+58%)</td></tr>
+<tr><td>Held-out robot instances (doubled deviations)</td><td>Policy-like targets</td><td>Position RMSE (rad)</td><td class="num">0.0612</td><td>residual: 0.0519 (-15%)</td><td>—</td></tr>
+<tr><td>Held-out robot instances (doubled deviations)</td><td>Policy-like targets</td><td>Torque rate RMS (Nm/s)</td><td class="num">1.89e+03</td><td>residual: 1.66e+03 (-12%); PPO contact: 1.8e+03 (-5%)</td><td>—</td></tr>
+<tr><td>Held-out robot instances (doubled deviations)</td><td>Contact (press, slide)</td><td>Excess contact force above the 15 N cap (mean while in contact) (N)</td><td class="num">15.6</td><td>PPO contact: 8.74 (-44%)</td><td>—</td></tr>
+<tr><td>Held-out robot instances (doubled deviations)</td><td>Contact (press, slide)</td><td>Peak normal force (N)</td><td class="num">217</td><td>residual: 112 (-48%); PPO contact: 58.2 (-73%)</td><td>—</td></tr>
+<tr><td>Held-out robot instances (doubled deviations)</td><td>Contact (press, slide)</td><td>Peak of the 20 ms low-pass filtered normal force (sustained force) (N)</td><td class="num">113</td><td>residual: 63.8 (-43%); PPO contact: 33.2 (-71%)</td><td>—</td></tr>
+<tr><td>Held-out robot instances (doubled deviations)</td><td>Blocked target</td><td>Peak normal force (N)</td><td class="num">112</td><td>PPO contact: 82.2 (-27%)</td><td>—</td></tr>
+<tr><td>Held-out robot instances (doubled deviations)</td><td>Blocked target</td><td>Feasible-direction tool error (m)</td><td class="num">0.0431</td><td>residual: 0.023 (-47%)</td><td>—</td></tr>
+</tbody>
+</table>
+
+<h2>6. The blocked target, redefined</h2>
+<p>What should a controller do when its position target is unreachable? The protocol had rewarded following the part of the reference that remains feasible, i.e. sliding along the surface; we now define the wanted response as <em>stop at the surface and wait</em>: hold the point where the tool first touched, apply no more force than the 15 N cap, and resume tracking when the reference returns. The cap itself follows what pick-and-place, peg insertion and light connector tasks need (connector datasheets list 20 to 30 N mating forces; third-party Franka software defaults its collision threshold to 30 N). Two metrics make the definition measurable, the tangential drift from the first-contact point and the fraction of time in motion while blocked, next to the force above the cap, the sustained peak, the apparent stiffness (force per metre of commanded depth) and the recovery after release.</p>
+<table>
+<caption>Blocked target under 'stop at the surface and wait' (16 in-distribution cases). Drift and motion are new; the force terms and the recovery existed. The PD under the previous definition had looked best on this family because it followed the reference's tangential drift; under the new one the ranking is driven by the force the controller keeps applying.</caption>
+<thead>
+<tr><th>Controller</th><th class="num">Drift from contact point (cm)</th><th class="num">Moving while in contact (-)</th><th class="num">Force above 15 N (N)</th><th class="num">Sustained peak (N)</th><th class="num">Apparent stiffness (N/m)</th><th class="num">Recovery after release (s)</th></tr>
+</thead>
+<tbody>
+<tr><td>PD, shared gains</td><td class="num">3.2</td><td class="num">0.31</td><td class="num">45.6</td><td class="num">90</td><td class="num">1180</td><td class="num">0.37</td></tr>
+<tr><td>PD + learned residual</td><td class="num">1.9</td><td class="num">0.26</td><td class="num">57.2</td><td class="num">93</td><td class="num">1441</td><td class="num">0.67</td></tr>
+<tr><td>PPO, contact families</td><td class="num">0.9</td><td class="num">0.21</td><td class="num">41.4</td><td class="num">73</td><td class="num">1093</td><td class="num">0.70</td></tr>
+<tr><td>PPO under the 15 N cap (gain residual)</td><td class="num">2.1</td><td class="num">0.26</td><td class="num">51.3</td><td class="num">89</td><td class="num">1312</td><td class="num">0.54</td></tr>
+<tr><td>PPO, external-torque input</td><td class="num">2.2</td><td class="num">0.28</td><td class="num">43.7</td><td class="num">85</td><td class="num">1153</td><td class="num">0.61</td></tr>
+</tbody>
+</table><figure id="fig-blocked" class="wide">
+<img src="figures/blocked.svg" alt="The blocked target under the new definition &#x27;stop at the surface and wait&#x27;: mean tangential drift of the tool from the point where it first touched (lower is better), force above the 15 N cap, and recovery after the reference returns; 16 blocked cases, in distribution. No controller yet waits with a capped force: all push with 45 to 60 N above the cap.">
+<figcaption>The blocked target under the new definition 'stop at the surface and wait': mean tangential drift of the tool from the point where it first touched (lower is better), force above the 15 N cap, and recovery after the reference returns; 16 blocked cases, in distribution. No controller yet waits with a capped force: all push with 45 to 60 N above the cap.</figcaption>
+</figure>
+
+<h2>7. What we learned about training for contact</h2>
+<p>Three findings shaped the current approach. First, the reward must name the behaviour: the original reward penalised force above a limit but never asked for a maintained press, and evaluated on saved episodes it preferred intermittent light contact to a steady press. The current reward adds, while the reference is inside a surface, a kernel on the normal force around the force the commanded depth implies (capped at 15 N) and switches off the joint kernel that would ask for the infeasible depth; audited on identical windows against a privileged exemplar (a PD whose gains drop to 0.3 only while the reference is inside), it ranks the exemplar first on both surface families. On blocked windows the privileged exemplar scores +0.22 reward units per step under the new reward, the PD -4.91 and the learned residual -6.77. Second, the impact transient must not dominate: a blind position controller cannot avoid the impact at the reference speed, and a one-step force penalty of an impact is a hundred times the tracking reward, so gradients through it teach softening everywhere; the force terms now act on a 20 ms filtered force, and the actor-critic route no longer backpropagates through the contact force at all. Third, the data must contain the behaviour: a sign error in the blocked-reference generator had left 60% of the blocked training windows without any block, and the wall references had the hand reach the wall before the tool; both are fixed, with regression tests, and every table in this summary is computed on the corrected protocol.</p>
+<p>Two further observations guide the next phase. A linear probe of the featured controller's internal features decodes 'tool in contact' with only 0.76 accuracy and a 0.7 s median delay, so contact is not something the network currently senses promptly; giving it the robot model's external-torque estimate (the signal a Panda exposes on hardware) produced the first fine-tuned arms to beat their warm start on validation, before training was paused for this checkpoint. And a residual parameterised as bounded multipliers of the PD gains, so that yielding is a small action, was never explored by PPO at the exploration width used, which is a property of the optimiser setting, not of the parameterisation.</p>
+
+<h2>8. Next</h2>
+<ul>
+<li>Train under the stop-and-wait definition: the tangential kernel around the first-contact point in blocked windows, with the external-torque input, three seeds, both training routes; then the model study (feature encoding, output smoothing).</li>
+<li>Report compliance as what it is: apparent stiffness in contact, drift and motion while blocked, force above the cap, and the recovery after release, next to the tracking metrics.</li>
+<li>Keep the task family held out as the end-to-end test; the multi-task recipe follows once one family is solved.</li>
+</ul>

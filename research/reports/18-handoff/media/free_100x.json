@@ -1,0 +1,57 @@
+{
+  "path": "research/reports/18-handoff/media/free_100x.mp4",
+  "record": "research/reports/18-handoff/media/free_100x.json",
+  "frames": 238,
+  "fps": 50,
+  "speed": 1.0,
+  "duration_s": 4.76,
+  "width": 1024,
+  "height": 750,
+  "resolution": [
+    1024,
+    750
+  ],
+  "view_size": [
+    480,
+    360
+  ],
+  "camera": "side",
+  "title": "Free joint-space motion, case free-test-013",
+  "plot_series": [
+    "pos_err",
+    "tau2",
+    "tool_z"
+  ],
+  "t_start": 0.0,
+  "t_end": 4.74,
+  "sample_step": 20,
+  "sample_rate_hz": 1000.0,
+  "posters": {
+    "first": "research/reports/18-handoff/media/free_100x-first.png",
+    "middle": "research/reports/18-handoff/media/free_100x-middle.png",
+    "last": "research/reports/18-handoff/media/free_100x-last.png"
+  },
+  "episodes": [
+    {
+      "method": "pd_feedforward",
+      "label": "PD, tracking-tuned, with feedforward",
+      "npz": "runs/m10r2/episodes_handoff/in_distribution__free-test-013__pd_feedforward.npz",
+      "sha256": "7f7bc3f68da75446c7358900eae90ccc2b7696e7da73edf1cfa896b6fe43b3e4",
+      "joint_rmse_mrad": 18.03964475024212,
+      "peak_normal_force_n": 0.0
+    },
+    {
+      "method": "distill_two",
+      "label": "Two-teacher student (seed 0)",
+      "npz": "runs/m10r2/episodes_handoff/in_distribution__free-test-013__distill_two-s0.npz",
+      "sha256": "3e82b787f51ac981e489ce86988591d502748c5190ca9816ddd3dc21a551cb17",
+      "joint_rmse_mrad": 2.3589618259538754,
+      "peak_normal_force_n": 0.0
+    }
+  ],
+  "reference": "gray sphere: commanded tool position, q_ref through llc.sim.nominal.NominalModel",
+  "trace": "measured tool path over the last 0.5 s, gray (old) to method color (new)",
+  "metrics": "joint RMSE over all joints and samples from t = 0 to the displayed time (mrad); peak normal force so far (N)",
+  "scene": "llc/sim/assets/panda_2f85_0800.xml",
+  "render_seconds": 2.97
+}

@@ -1,0 +1,65 @@
+{
+  "path": "research/reports/14-m9-plant-v3/media/free_100x.mp4",
+  "record": "research/reports/14-m9-plant-v3/media/free_100x.json",
+  "frames": 196,
+  "fps": 50,
+  "speed": 1.0,
+  "duration_s": 3.92,
+  "width": 1520,
+  "height": 750,
+  "resolution": [
+    1520,
+    750
+  ],
+  "view_size": [
+    480,
+    360
+  ],
+  "camera": "side",
+  "title": "Free joint-space motion, case free-test-011",
+  "plot_series": [
+    "pos_err",
+    "f_normal",
+    "tau2"
+  ],
+  "t_start": 0.0,
+  "t_end": 3.9,
+  "sample_step": 20,
+  "sample_rate_hz": 1000.0,
+  "posters": {
+    "first": "research/reports/14-m9-plant-v3/media/free_100x-first.png",
+    "middle": "research/reports/14-m9-plant-v3/media/free_100x-middle.png",
+    "last": "research/reports/14-m9-plant-v3/media/free_100x-last.png"
+  },
+  "episodes": [
+    {
+      "method": "pd_shared",
+      "label": "PD, shared gains (re-tuned on plant v3)",
+      "npz": "runs/m9/episodes_baselines/free-test-011__pd_shared.npz",
+      "sha256": "01feb9fabd2f5127c15e7b6d88f0e4018c4d98d897c1b343861d6573abdd3ce8",
+      "joint_rmse_mrad": 8.349678361935373,
+      "peak_normal_force_n": 0.0
+    },
+    {
+      "method": "pd_shared_v2gains",
+      "label": "PD with the plant v2 gains",
+      "npz": "runs/m9/episodes_baselines/free-test-011__pd_shared_v2gains.npz",
+      "sha256": "bb0233dfc98c7e7bd1c485f785c34f9ff6d9bb80e288f96e0e6a199e99785bdb",
+      "joint_rmse_mrad": 15.618529191962939,
+      "peak_normal_force_n": 0.0
+    },
+    {
+      "method": "oracle_pd",
+      "label": "Oracle around the PD (privileged)",
+      "npz": "runs/m9/episodes_baselines/free-test-011__oracle_pd.npz",
+      "sha256": "01feb9fabd2f5127c15e7b6d88f0e4018c4d98d897c1b343861d6573abdd3ce8",
+      "joint_rmse_mrad": 8.349678361935373,
+      "peak_normal_force_n": 0.0
+    }
+  ],
+  "reference": "gray sphere: commanded tool position, q_ref through llc.sim.nominal.NominalModel",
+  "trace": "measured tool path over the last 0.5 s, gray (old) to method color (new)",
+  "metrics": "joint RMSE over all joints and samples from t = 0 to the displayed time (mrad); peak normal force so far (N)",
+  "scene": "llc/sim/assets/panda_2f85_0800.xml",
+  "render_seconds": 4.71
+}

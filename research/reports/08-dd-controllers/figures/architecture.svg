@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="400" viewBox="0 0 900 400" font-family="-apple-system, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="12">
+  <defs><marker id="a" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#6e6e73"/></marker></defs>
+  <style>.box{fill:#ffffff;stroke:#1d1d1f;stroke-width:1}.quiet{fill:#f7f7f8;stroke:#c9c9ce;stroke-width:1}.t{fill:#1d1d1f}.m{fill:#6e6e73}.res{stroke:#1baf7a}.nt{stroke:#eb6834}</style>
+  <!-- inputs -->
+  <rect x="20" y="30" width="190" height="52" rx="3" class="quiet"/>
+  <text x="30" y="50" class="t">current state and reference</text>
+  <text x="30" y="68" class="m">q, qd, q_ref − q, qd_ref   (28)</text>
+  <rect x="20" y="100" width="190" height="66" rx="3" class="quiet"/>
+  <text x="30" y="120" class="t">strided history, 100 ms</text>
+  <text x="30" y="138" class="m">10 samples at 10 ms spacing</text>
+  <text x="30" y="156" class="m">(q − q_now, qd, τ applied)   (210)</text>
+  <rect x="20" y="184" width="190" height="66" rx="3" class="quiet"/>
+  <text x="30" y="204" class="t">dense history, 32 ms</text>
+  <text x="30" y="222" class="m">32 samples at 1 ms spacing</text>
+  <text x="30" y="240" class="m">(q − q_now, qd, τ applied)   (672)</text>
+  <text x="30" y="285" class="m">scales: q/3, qd/2, errors/0.2 rad, τ/τ_max</text>
+  <!-- encoder -->
+  <rect x="250" y="100" width="120" height="66" rx="3" class="box"/>
+  <text x="262" y="122" class="t">concatenate</text>
+  <text x="262" y="140" class="m">910 inputs</text>
+  <text x="262" y="158" class="m">optional Fourier features</text>
+  <line x1="210" y1="56" x2="250" y2="120" marker-end="url(#a)" stroke="#6e6e73"/>
+  <line x1="210" y1="133" x2="250" y2="133" marker-end="url(#a)" stroke="#6e6e73"/>
+  <line x1="210" y1="217" x2="250" y2="146" marker-end="url(#a)" stroke="#6e6e73"/>
+  <!-- MLP -->
+  <rect x="410" y="100" width="130" height="66" rx="3" class="box"/>
+  <text x="422" y="122" class="t">MLP</text>
+  <text x="422" y="140" class="m">2 × 128, ELU</text>
+  <text x="422" y="158" class="m">head: 7 outputs</text>
+  <line x1="370" y1="133" x2="410" y2="133" marker-end="url(#a)" stroke="#6e6e73"/>
+  <!-- two heads -->
+  <rect x="580" y="40" width="300" height="86" rx="3" class="box res"/>
+  <text x="592" y="62" class="t">PD + residual</text>
+  <text x="592" y="80" class="m">r = 0.5 τ_max · tanh(z)</text>
+  <text x="592" y="98" class="m">τ = K_p (q_ref − q) + K_d (qd_ref − qd) + g(q) + r</text>
+  <text x="592" y="116" class="m">K_p, K_d: shared tuned gains; g from the nominal model</text>
+  <rect x="580" y="150" width="300" height="68" rx="3" class="box nt"/>
+  <text x="592" y="172" class="t">neural torque</text>
+  <text x="592" y="190" class="m">τ = τ_max · tanh(z)</text>
+  <text x="592" y="208" class="m">no PD, no gravity term; initialised by PD imitation</text>
+  <line x1="540" y1="120" x2="580" y2="83" marker-end="url(#a)" stroke="#6e6e73"/>
+  <line x1="540" y1="146" x2="580" y2="184" marker-end="url(#a)" stroke="#6e6e73"/>
+  <!-- plant -->
+  <rect x="620" y="260" width="220" height="60" rx="3" class="quiet"/>
+  <text x="632" y="282" class="t">plant, 1 kHz</text>
+  <text x="632" y="300" class="m">τ clamped to ±τ_max, applied for the next 1 ms step</text>
+  <line x1="730" y1="218" x2="730" y2="260" marker-end="url(#a)" stroke="#6e6e73"/>
+  <path d="M620,300 L 580,300 L 580,340 L 100,340 L 100,250" fill="none" stroke="#6e6e73" stroke-dasharray="4 3" marker-end="url(#a)"/>
+  <text x="120" y="356" class="m">measured q, qd and applied τ enter the histories at every step; the network runs every step with zero compute latency</text>
+  <text x="20" y="388" class="m">Shared by both parameterizations: inputs, histories, MLP width and depth, loss, curriculum, training budget. They differ only in the output map.</text>
+</svg>

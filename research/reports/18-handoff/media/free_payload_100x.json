@@ -1,0 +1,57 @@
+{
+  "path": "research/reports/18-handoff/media/free_payload_100x.mp4",
+  "record": "research/reports/18-handoff/media/free_payload_100x.json",
+  "frames": 293,
+  "fps": 50,
+  "speed": 1.0,
+  "duration_s": 5.86,
+  "width": 1024,
+  "height": 750,
+  "resolution": [
+    1024,
+    750
+  ],
+  "view_size": [
+    480,
+    360
+  ],
+  "camera": "side",
+  "title": "Free motion with a 3 kg payload (held out), case free-test-000",
+  "plot_series": [
+    "pos_err",
+    "tau2",
+    "tool_z"
+  ],
+  "t_start": 0.0,
+  "t_end": 5.84,
+  "sample_step": 20,
+  "sample_rate_hz": 1000.0,
+  "posters": {
+    "first": "research/reports/18-handoff/media/free_payload_100x-first.png",
+    "middle": "research/reports/18-handoff/media/free_payload_100x-middle.png",
+    "last": "research/reports/18-handoff/media/free_payload_100x-last.png"
+  },
+  "episodes": [
+    {
+      "method": "pd_feedforward",
+      "label": "PD, tracking-tuned, with feedforward",
+      "npz": "runs/m10r2/episodes_handoff/payload_3kg__free-test-000__pd_feedforward.npz",
+      "sha256": "0d1ad455902de40ab0b92df55480fc5b91b2c7d18dd8024aa5955b5273447a67",
+      "joint_rmse_mrad": 22.093678612211136,
+      "peak_normal_force_n": 0.0
+    },
+    {
+      "method": "distill_two",
+      "label": "Two-teacher student (seed 0)",
+      "npz": "runs/m10r2/episodes_handoff/payload_3kg__free-test-000__distill_two-s0.npz",
+      "sha256": "fbc5fafe1daa36f6c0f519935c3d9762d80ce63b6c366307388644b1391bc22d",
+      "joint_rmse_mrad": 7.328728775485182,
+      "peak_normal_force_n": 0.0
+    }
+  ],
+  "reference": "gray sphere: commanded tool position, q_ref through llc.sim.nominal.NominalModel",
+  "trace": "measured tool path over the last 0.5 s, gray (old) to method color (new)",
+  "metrics": "joint RMSE over all joints and samples from t = 0 to the displayed time (mrad); peak normal force so far (N)",
+  "scene": "llc/sim/assets/panda_2f85_0800.xml",
+  "render_seconds": 3.48
+}

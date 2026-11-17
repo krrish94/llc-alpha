@@ -1,0 +1,73 @@
+{
+  "path": "research/reports/13-dd-impedance/media/hold_100x.mp4",
+  "record": "research/reports/13-dd-impedance/media/hold_100x.json",
+  "frames": 150,
+  "fps": 50,
+  "speed": 1.0,
+  "duration_s": 3.0,
+  "width": 2016,
+  "height": 750,
+  "resolution": [
+    2016,
+    750
+  ],
+  "view_size": [
+    480,
+    360
+  ],
+  "camera": "side",
+  "title": "Hold, case hold-test-003",
+  "plot_series": [
+    "pos_err",
+    "f_normal",
+    "tau2"
+  ],
+  "t_start": 0.0,
+  "t_end": 2.98,
+  "sample_step": 20,
+  "sample_rate_hz": 1000.0,
+  "posters": {
+    "first": "research/reports/13-dd-impedance/media/hold_100x-first.png",
+    "middle": "research/reports/13-dd-impedance/media/hold_100x-middle.png",
+    "last": "research/reports/13-dd-impedance/media/hold_100x-last.png"
+  },
+  "episodes": [
+    {
+      "method": "pd_shared",
+      "label": "PD, shared gains",
+      "npz": "runs/d7/episodes_stage1/hold-test-003__pd_shared.npz",
+      "sha256": "8923de02ec133b03e5c1d42559de85ecc32c1f51d43822f9eb52cdbf04867b26",
+      "joint_rmse_mrad": 14.442626935314614,
+      "peak_normal_force_n": 0.0
+    },
+    {
+      "method": "oracle_pd",
+      "label": "Oracle around the PD (privileged)",
+      "npz": "runs/d7/episodes_stage1/hold-test-003__oracle_pd.npz",
+      "sha256": "8923de02ec133b03e5c1d42559de85ecc32c1f51d43822f9eb52cdbf04867b26",
+      "joint_rmse_mrad": 14.442626935314614,
+      "peak_normal_force_n": 0.0
+    },
+    {
+      "method": "pd_residual_acmed_s02_lowrate",
+      "label": "PD + residual (D3 warm start)",
+      "npz": "runs/d7/episodes_stage1/hold-test-003__pd_residual_acmed_s02_lowrate-s0.npz",
+      "sha256": "325b6d4abbf1266796a8d8905c4dfdff9dc1fe1861ed189821f8836b76768311",
+      "joint_rmse_mrad": 5.300240414254552,
+      "peak_normal_force_n": 0.0
+    },
+    {
+      "method": "distill_gain_ext",
+      "label": "Distilled student",
+      "npz": "runs/d7/episodes_stage1/hold-test-003__distill_gain_ext-s0.npz",
+      "sha256": "e72df800c3506593dae4324a01e65c4770fd63840c3c880f5d97ed54835e4287",
+      "joint_rmse_mrad": 5.9516638930848345,
+      "peak_normal_force_n": 0.0
+    }
+  ],
+  "reference": "gray sphere: commanded tool position, q_ref through llc.sim.nominal.NominalModel",
+  "trace": "measured tool path over the last 0.5 s, gray (old) to method color (new)",
+  "metrics": "joint RMSE over all joints and samples from t = 0 to the displayed time (mrad); peak normal force so far (N)",
+  "scene": "llc/sim/assets/panda_scene.xml",
+  "render_seconds": 2.99
+}

@@ -1,0 +1,57 @@
+{
+  "path": "research/reports/07-dd-baselines/media/contact2_025x.mp4",
+  "record": "research/reports/07-dd-baselines/media/contact2_025x.json",
+  "frames": 478,
+  "fps": 50,
+  "speed": 0.25,
+  "duration_s": 9.56,
+  "width": 1024,
+  "height": 750,
+  "resolution": [
+    1024,
+    750
+  ],
+  "view_size": [
+    480,
+    360
+  ],
+  "camera": "detail",
+  "title": "Contact, case contact2-test-002",
+  "plot_series": [
+    "pos_err",
+    "f_normal",
+    "tau2"
+  ],
+  "t_start": 0.0,
+  "t_end": 2.3850000000000002,
+  "sample_step": 5,
+  "sample_rate_hz": 1000.0,
+  "posters": {
+    "first": "research/reports/07-dd-baselines/media/contact2_025x-first.png",
+    "middle": "research/reports/07-dd-baselines/media/contact2_025x-middle.png",
+    "last": "research/reports/07-dd-baselines/media/contact2_025x-last.png"
+  },
+  "episodes": [
+    {
+      "method": "pd_shared",
+      "label": "PD, shared gains (v2)",
+      "npz": "runs/d1/episodes/contact2-test-002__pd_shared.npz",
+      "sha256": "0fb72afbcf4ae7670714d889f3cae9b4f894561e67a96c87d720023a31ff537a",
+      "joint_rmse_mrad": 23.75148410952213,
+      "peak_normal_force_n": 0.0
+    },
+    {
+      "method": "pd_shared_v1",
+      "label": "PD, shared gains (v1)",
+      "npz": "runs/d1/episodes/contact2-test-002__pd_shared_v1.npz",
+      "sha256": "87573f75f0d270776dba5d37d4eebc13c2deacd1f337679a682b0fa2fb0794f5",
+      "joint_rmse_mrad": 16.147346671758687,
+      "peak_normal_force_n": 164.43504119855228
+    }
+  ],
+  "reference": "gray sphere: commanded tool position, q_ref through llc.sim.nominal.NominalModel",
+  "trace": "measured tool path over the last 0.5 s, gray (old) to method color (new)",
+  "metrics": "joint RMSE over all joints and samples from t = 0 to the displayed time (mrad); peak normal force so far (N)",
+  "scene": "llc/sim/assets/panda_scene.xml",
+  "render_seconds": 4.66
+}

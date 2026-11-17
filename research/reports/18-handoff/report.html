@@ -1,0 +1,390 @@
+<h2>Summary</h2>
+<p><strong>State of the investigation.</strong> The project asked whether the low-level feedback loop of a torque-controlled manipulator can be learned so that one controller is competitive with, or better than, the best hand-tuned classical law in every operating regime at once. After seventeen reports on a simulated Franka Panda the answer is yes on 28 of the 33 pre-registered family-and-group rows, with the five misses on one family at 5 to 6%. The controller that does this does not replace the classical loop; it adds to it. A 1 kHz PD law with the nominal inverse-dynamics feedforward runs under a network that, every 10 ms, sets bounded per-joint gain multipliers and a bounded torque residual from 100 ms of proprioceptive history and an estimate of the external torque. It is trained in two stages, both in simulation: a residual by backpropagation through the plant on free-space references, then imitation of two privileged teachers, the ideal-robot torque in free space and a contact-impedance law in contact. It tracks free motion at 2.6 mrad against 4.9 for the feedforward PD, holds at 1.6 against 8.1, waits at a blocked surface with 5 N above the 15 N cap where the best classical pushes 23 N, presses inside the 7 to 12 N band, places a block at 5 N against 14, and moves by at most 5% under a 5 ms compute latency.</p>
+<p>Of the agenda's hypothesis space, three parameterisations by three learning routes, one cell survived: the residual form, trained by gradients through the plant and finished by imitation of a specified behaviour. Reinforcement learning (five rounds), direct torque networks and gain schedules on their own did not earn a place; a learned dynamics model did, as a training medium, but was not carried to the final plant. The remaining gaps are a smoothness miss on policy-like targets, a press band that sits 5 N above the cap on sliding contact, task-success rates on sixteen cases, privileged labels without a hardware path yet, and every claim resting on three seeds and sixteen cases per family. Sections 6 to 8 list the gaps, what to revisit when the method is scaled, and what a run costs.</p>
+
+<h2>1. The problem and the setting</h2>
+<h3>1.1 The question</h3>
+<p>Every torque-controlled robot closes a feedback loop between the policy's targets and the motors, usually a PD or impedance law at 100 Hz to 1 kHz with gains tuned by hand. The <a href="../research/index.html">research agenda</a> argues that this loop should be learned: no gain set serves every task, every phase of a task and every robot instance; policies treat the loop as a black box and pay for it in jerky and unstable behaviour; retuning by hand does not scale across robots, tasks and contact modes, and switching gain sets stably is hard in dynamic tasks; and a controller learned from proprioception in simulation has a small sim-to-real gap. The agenda's design space is three parameterisations (learned PD gains, PD plus a residual, direct torque prediction) by three learning routes (a known differentiable model, a learned dynamics model, reinforcement learning). Section 3 maps what was tried in it and what was added to it.</p>
+<h3>1.2 The plant</h3>
+<p>MuJoCo at 1 kHz with torque actuators at the datasheet limits. Two plants: v2, the Panda with a 2 cm spherical tool (reports 07 to 13), and v3, the Panda with the Robotiq 2F-85 baked closed into one rigid tool body (reports 14 to 17; opened to 38 mm for pick-and-place), each with a table and a wall under the explicit soft contact model of ADR 0001 (about 60 kN/m) and two compliant surfaces held out for evaluation. Every evaluation and training window draws a robot instance (link masses ±5%, inertias ±10%, centres of mass ±5 mm, joint damping 0.5 to 2×, armature ±20%, dry friction 0 to 0.3 Nm, actuator gain ±3%), a payload of 0 to 2 kg (3 kg in training and in one held-out group) and sensor noise. Every controller, classical or learned, uses the datasheet model only; the simulated plant's parameters are never read.</p>
+<h3>1.3 The protocol</h3>
+<table>
+<caption>Protocol v3 (ADR 0009): 16 test cases per family, each with a robot instance, a payload of 0 to 2 kg and sensor noise; a disjoint training split generates the training references and a validation split selects checkpoints. Held-out groups: workspace, speed ×1.5 and ×2, payload 3 kg, doubled instance deviations, compliant surfaces of 2 kN/m and 500 N/m; a 5 ms compute-latency group for the learned controllers. Each family has a cap composite, a weighted sum of its metrics normalised by reference scales with the force terms at the 15 N cap, lower is better.</caption>
+<thead>
+<tr><th>Family</th><th>Reference</th><th>Wanted</th></tr>
+</thead>
+<tbody>
+<tr><td>Hold</td><td>hold a configuration; a 10 N tool pulse of 0.2 s</td><td>small error and deflection, smooth torque</td></tr>
+<tr><td>Free motion</td><td>minimum-jerk joint paths between random configurations</td><td>accurate, smooth</td></tr>
+<tr><td>Policy-like targets</td><td>held targets at 10 to 50 Hz with jitter and jumps</td><td>track the intent, no chatter</td></tr>
+<tr><td>Step targets</td><td>joint-space steps</td><td>fast settling, no overshoot</td></tr>
+<tr><td>Press and slide</td><td>approach, press 0.4 to 1.4 cm (7 to 12 N), slide, release; table or wall</td><td>force in the band, contact kept, no impact</td></tr>
+<tr><td>Blocked target</td><td>a path 3 to 8 cm through the table or the wall</td><td>stop at the surface and wait, resume when the target returns</td></tr>
+<tr><td>Task sequence (held out)</td><td>reach, press, slide, lift, transport, press, lift</td><td>the press band under a task-like sequence</td></tr>
+<tr><td>Box pushing</td><td>push a 5 cm box 10 cm with the fingertip faces</td><td>box within 2 cm and 15 degrees, gently</td></tr>
+<tr><td>Pick-and-place</td><td>carry a held block, place it, release, lift</td><td>place within 2 cm, upright, gently; track after the payload change</td></tr>
+</tbody>
+</table>
+<h3>1.4 Baselines, ceiling and criterion</h3>
+<p><strong>Classical set.</strong> Four fixed controllers, each one gain set for all families: a PD plus gravity law whose gains CMA-ES tuned on the mean tracking composite over the seven families (four training cases each), a second set tuned on the cap composite with the same budget, and the inverse-dynamics feedforward variant of each (the computed-torque term of the reference added to the PD). No controller is tuned per family. 'The best classical controller of the family' is the one of the four with the lowest cap composite on that family and group; it is the reference of every comparison, and this bar is optimistic by construction: the selection is made per row on the test cases, whereas each learned controller is one network selected once on the validation split. Section 2.3 also reports the comparison against a single classical controller.</p>
+<p><strong>Ceiling.</strong> The privileged contact-impedance oracle around the PD (ADR 0008): it knows the surface and the payload and executes the wanted contact law exactly. It marks what the contact families can give; it is never a baseline.</p>
+<p><strong>Criterion</strong> (ADR 0010, pre-registered before Milestone 10): within 5% of the best classical or better on every family and held-out group composite (33 rows), better on the three contact families and both task-success rates, three seeds with paired intervals excluding zero where a win is claimed, and no divergence under a 5 ms compute latency.</p>
+
+<h2>2. The controller that resulted</h2>
+<figure class="wide" id="fig-architecture">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 470" width="1000" role="img" aria-labelledby="fig-arch-title" style="font-family:Helvetica Neue, Helvetica, Arial, sans-serif;font-size:12px;max-width:100%;height:auto">
+<title id="fig-arch-title">The learned low-level controller at run time and its training pipeline</title>
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#6e6e73"/></marker></defs>
+<text x="20" y="24" fill="#1d1d1f" font-size="13" font-weight="600">A. The controller at run time (every signal a Panda exposes)</text>
+<rect x="20" y="52" width="180" height="64" rx="4" fill="#f7f7f8" stroke="#e3e3e6" stroke-width="1.2"/>
+<text x="110.0" y="73.0" text-anchor="middle" fill="#1d1d1f" font-size="12" font-weight="600">Reference</text>
+<text x="110.0" y="88.0" text-anchor="middle" fill="#1d1d1f" font-size="12">q_ref, q̇_ref from the policy</text>
+<text x="110.0" y="103.0" text-anchor="middle" fill="#1d1d1f" font-size="12">or trajectory, any rate</text>
+<rect x="250" y="44" width="330" height="80" rx="4" fill="#f7f7f8" stroke="#e3e3e6" stroke-width="1.2"/>
+<text x="415.0" y="65.5" text-anchor="middle" fill="#1d1d1f" font-size="12" font-weight="600">Base law at 1 kHz</text>
+<text x="415.0" y="80.5" text-anchor="middle" fill="#1d1d1f" font-size="12">τ = α ∘ (K_p e + K_d ė)</text>
+<text x="415.0" y="95.5" text-anchor="middle" fill="#1d1d1f" font-size="12">+ M(q) q̈_ref + C(q, q̇_ref) q̇_ref + g(q)</text>
+<text x="415.0" y="110.5" text-anchor="middle" fill="#1d1d1f" font-size="12">+ Δτ        (nominal model; e = q_ref − q)</text>
+<rect x="640" y="52" width="180" height="64" rx="4" fill="#f7f7f8" stroke="#e3e3e6" stroke-width="1.2"/>
+<text x="730.0" y="73.0" text-anchor="middle" fill="#1d1d1f" font-size="12" font-weight="600">Robot</text>
+<text x="730.0" y="88.0" text-anchor="middle" fill="#1d1d1f" font-size="12">Panda + Robotiq 2F-85</text>
+<text x="730.0" y="103.0" text-anchor="middle" fill="#1d1d1f" font-size="12">torque interface, 1 kHz</text>
+<line x1="200" y1="84" x2="248" y2="84" stroke="#6e6e73" stroke-width="1.2" marker-end="url(#arrow)"/>
+<line x1="580" y1="84" x2="638" y2="84" stroke="#6e6e73" stroke-width="1.2" marker-end="url(#arrow)"/>
+<text x="609" y="78" text-anchor="middle" fill="#6e6e73" font-size="11">τ</text>
+<path d="M 730 116 L 730 140 L 415 140" fill="none" stroke="#6e6e73" stroke-width="1.2"/>
+<line x1="415" y1="140" x2="415" y2="126" stroke="#6e6e73" stroke-width="1.2" marker-end="url(#arrow)"/>
+<text x="560" y="154" text-anchor="middle" fill="#6e6e73" font-size="11">q, q̇ (feedback)</text>
+<rect x="560" y="176" width="300" height="72" rx="4" fill="#f7f7f8" stroke="#e3e3e6" stroke-width="1.2"/>
+<text x="710.0" y="193.5" text-anchor="middle" fill="#1d1d1f" font-size="12" font-weight="600">History, two scales</text>
+<text x="710.0" y="208.5" text-anchor="middle" fill="#1d1d1f" font-size="12">100 ms at 10 ms spacing + last 32 ms at 1 ms</text>
+<text x="710.0" y="223.5" text-anchor="middle" fill="#1d1d1f" font-size="12">of q, q̇, commanded τ and the external-torque</text>
+<text x="710.0" y="238.5" text-anchor="middle" fill="#1d1d1f" font-size="12">estimate τ_ext = τ_link − model</text>
+<path d="M 790 116 L 790 160 L 710 160" fill="none" stroke="#6e6e73" stroke-width="1.2"/>
+<line x1="710" y1="160" x2="710" y2="174" stroke="#6e6e73" stroke-width="1.2" marker-end="url(#arrow)"/>
+<rect x="120" y="176" width="360" height="72" rx="4" fill="#f7f7f8" stroke="#2e7d32" stroke-width="1.2"/>
+<text x="300.0" y="193.5" text-anchor="middle" fill="#1d1d1f" font-size="12" font-weight="600">Network, decision every 10 ms</text>
+<text x="300.0" y="208.5" text-anchor="middle" fill="#1d1d1f" font-size="12">2 × 128 MLP; compute latency 5 ms modelled, output held</text>
+<text x="300.0" y="223.5" text-anchor="middle" fill="#1d1d1f" font-size="12">α: per-joint gain multipliers, K_p × [0.02, 1.5], K_d × [0.3, 2]</text>
+<text x="300.0" y="238.5" text-anchor="middle" fill="#1d1d1f" font-size="12">Δτ: residual, bounded at half the torque limit</text>
+<line x1="560" y1="212" x2="482" y2="212" stroke="#6e6e73" stroke-width="1.2" marker-end="url(#arrow)"/>
+<line x1="300" y1="176" x2="300" y2="126" stroke="#6e6e73" stroke-width="1.2" marker-end="url(#arrow)"/>
+<text x="322" y="156" text-anchor="middle" fill="#6e6e73" font-size="11">α, Δτ</text>
+<path d="M 110 84 L 110 212 L 118 212" fill="none" stroke="#6e6e73" stroke-width="1.2" stroke-dasharray="3 3"/>
+<text x="60" y="150" fill="#6e6e73" font-size="11">current reference</text>
+<text x="20" y="296" fill="#1d1d1f" font-size="13" font-weight="600">B. Training, entirely in simulation (MuJoCo; robot instances, payloads of 0 to 3 kg, sensor noise per window)</text>
+<rect x="20" y="322" width="170" height="112" rx="4" fill="#f7f7f8" stroke="#e3e3e6" stroke-width="1.2"/>
+<text x="105.0" y="347.0" text-anchor="middle" fill="#1d1d1f" font-size="11" font-weight="600">0. Shared PD gains</text>
+<text x="105.0" y="361.0" text-anchor="middle" fill="#1d1d1f" font-size="11">CMA-ES on the tracking</text>
+<text x="105.0" y="375.0" text-anchor="middle" fill="#1d1d1f" font-size="11">composite, training split</text>
+<text x="105.0" y="389.0" text-anchor="middle" fill="#1d1d1f" font-size="11">(40 iterations, 4 cases</text>
+<text x="105.0" y="403.0" text-anchor="middle" fill="#1d1d1f" font-size="11">per family)</text>
+<text x="105.0" y="417.0" text-anchor="middle" fill="#1d1d1f" font-size="11">report 14</text>
+<rect x="210" y="322" width="270" height="112" rx="4" fill="#f7f7f8" stroke="#1565c0" stroke-width="1.2"/>
+<text x="345.0" y="347.0" text-anchor="middle" fill="#1d1d1f" font-size="11" font-weight="600">1. Residual: actor-critic through the plant</text>
+<text x="345.0" y="361.0" text-anchor="middle" fill="#1d1d1f" font-size="11">finite-difference MuJoCo gradients, clipped</text>
+<text x="345.0" y="375.0" text-anchor="middle" fill="#1d1d1f" font-size="11">at the batch median; bounded tracking kernels</text>
+<text x="345.0" y="389.0" text-anchor="middle" fill="#1d1d1f" font-size="11">(20 mrad), light torque-rate penalty, critic;</text>
+<text x="345.0" y="403.0" text-anchor="middle" fill="#1d1d1f" font-size="11">free-space families only, 250 iterations,</text>
+<text x="345.0" y="417.0" text-anchor="middle" fill="#1d1d1f" font-size="11">selected on free space; reports 09, 17</text>
+<rect x="500" y="322" width="300" height="112" rx="4" fill="#f7f7f8" stroke="#2e7d32" stroke-width="1.2"/>
+<text x="650.0" y="347.0" text-anchor="middle" fill="#1d1d1f" font-size="11" font-weight="600">2. Student: DAgger from two privileged teachers</text>
+<text x="650.0" y="361.0" text-anchor="middle" fill="#1d1d1f" font-size="11">free space: ideal-robot torque, relative to the</text>
+<text x="650.0" y="375.0" text-anchor="middle" fill="#1d1d1f" font-size="11">nominal law; contact: the impedance oracle</text>
+<text x="650.0" y="389.0" text-anchor="middle" fill="#1d1d1f" font-size="11">(7 N + 500 N/m × e, capped at 15 N; stop and wait</text>
+<text x="650.0" y="403.0" text-anchor="middle" fill="#1d1d1f" font-size="11">when blocked); free-space decisions ×3;</text>
+<text x="650.0" y="417.0" text-anchor="middle" fill="#1d1d1f" font-size="11">12 iterations × 48 episodes; reports 13, 17</text>
+<rect x="820" y="322" width="160" height="112" rx="4" fill="#f7f7f8" stroke="#e3e3e6" stroke-width="1.2"/>
+<text x="900.0" y="347.0" text-anchor="middle" fill="#1d1d1f" font-size="11" font-weight="600">3. Selection, benchmark</text>
+<text x="900.0" y="361.0" text-anchor="middle" fill="#1d1d1f" font-size="11">best checkpoint on the</text>
+<text x="900.0" y="375.0" text-anchor="middle" fill="#1d1d1f" font-size="11">validation cap composite;</text>
+<text x="900.0" y="389.0" text-anchor="middle" fill="#1d1d1f" font-size="11">protocol v3: 33 rows,</text>
+<text x="900.0" y="403.0" text-anchor="middle" fill="#1d1d1f" font-size="11">three seeds, 5 ms latency</text>
+<text x="900.0" y="417.0" text-anchor="middle" fill="#1d1d1f" font-size="11">reports 15, 16, 17</text>
+<line x1="190" y1="378" x2="208" y2="378" stroke="#6e6e73" stroke-width="1.2" marker-end="url(#arrow)"/>
+<line x1="480" y1="378" x2="498" y2="378" stroke="#6e6e73" stroke-width="1.2" marker-end="url(#arrow)"/>
+<line x1="800" y1="378" x2="818" y2="378" stroke="#6e6e73" stroke-width="1.2" marker-end="url(#arrow)"/>
+<text x="20" y="458" fill="#6e6e73" font-size="11">Gray boxes: classical or fixed parts. Coloured outlines: learned parts (green: the two-teacher student; blue: its stage-1 base). Stage 1 inherits the gains of stage 0; stage 2 is warm-started from stage 1 with the gain head at neutral.</text>
+</svg>
+<figcaption>The controller that resulted (A) and how it is trained (B). At run time a 1 kHz PD law with the nominal inverse-dynamics feedforward runs under a network that every 10 ms sets bounded per-joint gain multipliers and a bounded torque residual from two-scale proprioceptive history and the external-torque estimate. Training uses only simulation: shared gains by CMA-ES, a torque residual by backpropagation through the plant on free-space references, then imitation of two privileged teachers, with checkpoint selection on a validation split and the benchmark on a disjoint test split.</figcaption>
+</figure><h3>2.1 The law</h3>
+<p>At 1 kHz the commanded torque is τ = α ∘ (K_p e + K_d ė) + M(q) q̈_ref + C(q, q̇_ref) q̇_ref + g(q) + Δτ with e = q_ref − q, the shared gains K_p, K_d of the tracking-tuned PD, the nominal model's M, C and g, and q̈_ref the clipped central difference of q̇_ref (held targets contribute no feedforward). The per-joint multipliers α (stiffness in [0.02, 1.5], damping in [0.3, 2] of the shared gains) and the residual Δτ (bounded at half the torque limit) are the network's outputs, held for 10 ms between decisions; a 5 ms compute latency is modelled, so a decision observed at t acts from t + 5 ms. The network is a two-layer MLP of width 128 on the current reference and state and a two-scale history, 100 ms at 10 ms spacing plus the last 32 ms at 1 ms, of q, q̇, the commanded torque and the external-torque estimate (the measured link-side torque minus the nominal model's prediction). Every input is a signal the Panda exposes.</p>
+<h3>2.2 Training</h3>
+<p><strong>Stage 0, gains.</strong> Shared gains by CMA-ES on the tracking composite of four training cases per family (40 iterations).</p>
+<p><strong>Stage 1, the base residual.</strong> A torque residual on the feedforward PD, trained by a short-horizon actor-critic through the plant: windows of 2 s with a random instance, payload and (in 30% of the hold and free windows) a 10 N pulse; a reward of bounded tracking kernels (20 mrad half-width) with a light torque-rate penalty (weight 0.003); a privileged critic (payload, contact force and a preview of the reference as inputs; no torque history); gradients by MuJoCo's finite-difference transition derivatives, clipped per sample at three times the batch median. The base trains on the free-space families only (hold, free motion, policy-like, step), 250 iterations of 24 windows, and its checkpoint is selected on the free-space cap composite of four validation cases per family (ADR 0010, amendment 2).</p>
+<p><strong>Stage 2, the student.</strong> The base converted to the gain-multiplier form (head at neutral, exact warm start) with the external-torque input added, trained by DAgger: the teacher drives in the first iteration only, then the student drives and the teachers label every decision. In free space the label is the ideal-robot torque: the torque the sampled plant needs so that the nominal robot's response to the nominal law results, external loads included and referenced to the nominal law (the PD plus feedforward without the student's own residual); decisions where the nominal law saturates or the correction exceeds 30 Nm are dropped. In contact the label is the oracle's torque: the base's normal force replaced by a force-bounded spring on the actual error, 7 N + 500 N/m × e capped at 15 N, the first-contact point held when the reference is blocked, a 200 ms blend back on release, the payload's weight compensated. Free-space decisions enter the label loss with weight 3. Twelve iterations of 48 episodes (270 to 300 thousand labelled decisions); the checkpoint with the best validation cap composite (two cases per free-space family, eight per contact family) is kept. Three seeds of everything.</p>
+<h3>2.3 Where it stands</h3><table class="wide">
+<caption>Headline numbers of the handoff controller against the classical set and the privileged oracle, protocol v3 on the Panda with the Robotiq 2F-85, 16 test cases per family, three seeds pooled (runs/m10r2/metrics_test.json). 'Best classical of the family' is a selection among the four fixed classical controllers, each one gain set for all families, named in parentheses. 'Best single classical controller' is the one of the four that comes closest to that selection across the 33 criterion rows, the tracking-tuned PD with feedforward (within 5% of the per-family best on 22 of 33 rows; the others: tracking-tuned 12, cap-tuned 18, cap-tuned + feedforward 16). The oracle changes only the contact response; its free-space rows are those of the PD. Paired bootstrap intervals are in reports 15 and 17.</caption>
+<thead>
+<tr><th>Quantity (in distribution unless stated)</th><th class="num">Best classical of the family</th><th class="num">Best single classical controller</th><th class="num">Two-teacher student</th><th class="num">Oracle (privileged ceiling)</th></tr>
+</thead>
+<tbody>
+<tr><td>Free motion, position RMSE (mrad)</td><td class="num">4.9 (tracking-tuned + feedforward)</td><td class="num">4.9</td><td class="num">2.6</td><td class="num">—</td></tr>
+<tr><td>Free motion with a 3 kg payload, position RMSE (mrad)</td><td class="num">20.6 (tracking-tuned + feedforward)</td><td class="num">20.6</td><td class="num">5.0</td><td class="num">—</td></tr>
+<tr><td>Hold with 10 N pulses, position RMSE (mrad)</td><td class="num">8.1 (tracking-tuned)</td><td class="num">8.1</td><td class="num">1.6</td><td class="num">—</td></tr>
+<tr><td>Policy-like targets, position RMSE (mrad)</td><td class="num">43.1 (tracking-tuned)</td><td class="num">43.1</td><td class="num">40.6</td><td class="num">—</td></tr>
+<tr><td>Policy-like targets, torque-rate RMS (Nm/s)</td><td class="num">3701 (tracking-tuned)</td><td class="num">3701</td><td class="num">4139</td><td class="num">—</td></tr>
+<tr><td>Step targets, settling time (s)</td><td class="num">0.55 (tracking-tuned)</td><td class="num">0.55</td><td class="num">0.33</td><td class="num">—</td></tr>
+<tr><td>Press and slide, mean force (N; band 7 to 12)</td><td class="num">18.2 (cap-tuned)</td><td class="num">21.4</td><td class="num">10.6</td><td class="num">9.7</td></tr>
+<tr><td>Press and slide, force above the 15 N cap (N)</td><td class="num">9.1 (cap-tuned)</td><td class="num">11.5</td><td class="num">5.0</td><td class="num">4.6</td></tr>
+<tr><td>Press and slide, force below the 7 N floor (N)</td><td class="num">0.36 (cap-tuned)</td><td class="num">0.13</td><td class="num">1.21</td><td class="num">0.21</td></tr>
+<tr><td>Blocked target, force above the cap (N)</td><td class="num">23.0 (cap-tuned + feedforward)</td><td class="num">39.5</td><td class="num">5.3</td><td class="num">2.6</td></tr>
+<tr><td>Blocked target, apparent stiffness (N/m)</td><td class="num">968 (cap-tuned + feedforward)</td><td class="num">1401</td><td class="num">389</td><td class="num">418</td></tr>
+<tr><td>Blocked target, drift from the contact point (mm)</td><td class="num">17.9 (cap-tuned + feedforward)</td><td class="num">18.2</td><td class="num">7.1</td><td class="num">0.9</td></tr>
+<tr><td>Blocked target, release reaction (s)</td><td class="num">0.19 (cap-tuned + feedforward)</td><td class="num">0.18</td><td class="num">0.20</td><td class="num">0.05</td></tr>
+<tr><td>Blocked target on a 500 N/m surface, contact stiffness (N/m)</td><td class="num">923 (cap-tuned)</td><td class="num">1149</td><td class="num">452</td><td class="num">465</td></tr>
+<tr><td>Task sequence, force above the cap (N)</td><td class="num">10.4 (tracking-tuned + feedforward)</td><td class="num">10.4</td><td class="num">1.9</td><td class="num">2.8</td></tr>
+<tr><td>Box pushing, success (%)</td><td class="num">31 (tracking-tuned)</td><td class="num">31</td><td class="num">52</td><td class="num">—</td></tr>
+<tr><td>Pick-and-place, success (%)</td><td class="num">100 (tracking-tuned + feedforward)</td><td class="num">100</td><td class="num">100</td><td class="num">—</td></tr>
+<tr><td>Pick-and-place, force on the table while placing (N)</td><td class="num">14.1 (tracking-tuned + feedforward)</td><td class="num">14.1</td><td class="num">4.9</td><td class="num">—</td></tr>
+<tr><td>Pick-and-place, lift tracking after the release (mrad)</td><td class="num">8.4 (tracking-tuned + feedforward)</td><td class="num">8.4</td><td class="num">4.3</td><td class="num">—</td></tr>
+<tr><td>Free motion, torque-rate RMS (Nm/s)</td><td class="num">115 (tracking-tuned + feedforward)</td><td class="num">115</td><td class="num">159</td><td class="num">—</td></tr>
+<tr><td>Largest change of a family composite at 5 ms compute latency (%)</td><td class="num">0 (1 kHz law)</td><td class="num">0 (1 kHz law)</td><td class="num">4.7</td><td class="num">—</td></tr>
+</tbody>
+</table><figure id="fig-criterion-grid" class="wide">
+<img src="figures/criterion_grid.svg" alt="The pre-registered criterion of ADR 0010 as a grid: the cap composite of each learned controller divided by that of the best classical controller of the family, per held-out group (16 test cases per family, three seeds pooled; protocol v3 on the Panda with the Robotiq 2F-85). A ratio at or below 1.05 counts as met; a cross marks a miss. Blank cells are families a group does not contain. Left to right: the Milestone 10 student (report 15), the round-2 student distilled from the oracle alone, and the two-teacher student (report 17).">
+<figcaption>The pre-registered criterion of ADR 0010 as a grid: the cap composite of each learned controller divided by that of the best classical controller of the family, per held-out group (16 test cases per family, three seeds pooled; protocol v3 on the Panda with the Robotiq 2F-85). A ratio at or below 1.05 counts as met; a cross marks a miss. Blank cells are families a group does not contain. Left to right: the Milestone 10 student (report 15), the round-2 student distilled from the oracle alone, and the two-teacher student (report 17).</figcaption>
+</figure><p>The student meets 28 of 33 rows. It wins the three contact families by 13 to 60% (blocked targets at 0.40 to 0.51 of the best classical in every group), every free-space family except one (hold 0.47, free motion 0.36 to 0.90, steps 0.79), both compliant surfaces, the 3 kg payload group, and push success (52 against 31%, eight or nine of sixteen boxes against five); placement is at the ceiling for everyone (100%) with the student placing at a third of the force. The five misses are the policy-like family (held targets at 10 to 50 Hz) at 1.05 to 1.06 in every group: lower tracking error than the PD, higher torque rate. The same student distilled from the oracle alone meets 29 rows and misses free motion where the nominal model is accurate (6.9 against 4.9 mrad); the Milestone 10 student, without the model term in its base, met 27. No learned controller diverges anywhere, and the residual students move by at most 5% at 5 ms of compute latency. The free-motion win is a mean over cases, not a uniform one: per seed the student loses 4 to 6 of the 16 cases, all where the nominal model is accurate and the feedforward PD is already at 1 to 3 mrad, by up to a factor of 4.8 (5.3 against 1.1 mrad, a 47 mrad burst on one joint); it wins the rest, by the most where the model is wrong (18 to 2.4 mrad on the PD's worst case).</p><p>Against one classical controller for everything, the tracking-tuned PD with feedforward, the student meets 28 of 33 rows with the same five policy-like misses, because on that family the feedforward PD is the per-family best anyway; against the cap-tuned PD alone it meets all 33. The criterion of ADR 0010 is the harder one, against the per-family selection, and the grid above reports that.</p><h3>2.4 Representative episodes</h3>
+<p>Ten side-by-side replays, one per behaviour the protocol asks for: the best classical controller of the family on the left, the learned controller (seed 0) on the right, the privileged oracle between them in the contact clips. Every view replays the stored joint trajectory of the same test case through the same scene and camera; the gray sphere is the commanded tool position; the plot strip below each clip shows the full episode with a cursor at the displayed time, and the joint RMSE and peak force under each view accumulate from the start. Six of the in-distribution clips use the benchmark's representative case per family (the median composite of the tracking-tuned PD); the free-motion clip shows an instance on which the nominal model is wrong; the held-out and task clips state their selection rule. What to look for: in free space the learned controller's error curve lies below the PD's with little visible difference in the motion (the per-case losses are counted in Section 2.3); in contact the force curve stays bounded where the PD's does not; in the task clips the object's motion follows from the force the controller lets through.</p>
+<figure class="video wide" id="fig-video-hold">
+<video id="fig-video-hold-video" controls preload="metadata" poster="media/hold_100x-middle.png">
+<source src="media/hold_100x.mp4" type="video/mp4">
+<p class="missing">Video playback is not supported here; <a href="media/hold_100x.mp4">download the video (MP4)</a>.</p>
+</video>
+<div class="widget timeseries" data-widget="timeseries" data-src="data/ts_hold.json" data-video="fig-video-hold-video" data-video-speed="1">
+<div class="widget-body">
+<p class="missing">No static figure for this viewer; the interactive view needs JavaScript.</p>
+</div>
+</div>
+<figcaption>Hold with a 10 N tool pulse of 0.2 s at t = 1 s (the median case of the tracking-tuned PD's composite, the benchmark's representative case), real time. The learned controller holds the loaded, perturbed instance where the PD sags under the payload and the pulse: the error plot shows the deflection and its recovery; family means 1.6 against 8.1 mrad. The gray sphere is the commanded tool position; the metrics under each view accumulate causally; the plot cursor follows the video. <a class="source" href="media/hold_100x.mp4">Video (MP4)</a> <a class="source" href="data/ts_hold.json">Data (JSON)</a></figcaption>
+</figure>
+<figure class="video wide" id="fig-video-free">
+<video id="fig-video-free-video" controls preload="metadata" poster="media/free_100x-middle.png">
+<source src="media/free_100x.mp4" type="video/mp4">
+<p class="missing">Video playback is not supported here; <a href="media/free_100x.mp4">download the video (MP4)</a>.</p>
+</video>
+<div class="widget timeseries" data-widget="timeseries" data-src="data/ts_free.json" data-video="fig-video-free-video" data-video-speed="1">
+<div class="widget-body">
+<p class="missing">No static figure for this viewer; the interactive view needs JavaScript.</p>
+</div>
+</div>
+<figcaption>Free motion, real time, against the feedforward PD, the best classical controller of this family, on an instance and payload on which the nominal model is wrong (the PD at 18.0 mrad, the student at 2.4). Both follow the gray commanded tool; the error plot separates them: the feedforward does not know this robot, the learned part infers it from the history. Over the sixteen cases the student (seed 0) wins 11 and loses 5, the losses where the PD is already at 1 to 3 mrad (Section 2.3); the family means are 2.6 against 4.9 mrad. The gray sphere is the commanded tool position; the metrics under each view accumulate causally; the plot cursor follows the video. <a class="source" href="media/free_100x.mp4">Video (MP4)</a> <a class="source" href="data/ts_free.json">Data (JSON)</a></figcaption>
+</figure>
+<figure class="video wide" id="fig-video-free_payload">
+<video id="fig-video-free_payload-video" controls preload="metadata" poster="media/free_payload_100x-middle.png">
+<source src="media/free_payload_100x.mp4" type="video/mp4">
+<p class="missing">Video playback is not supported here; <a href="media/free_payload_100x.mp4">download the video (MP4)</a>.</p>
+</video>
+<div class="widget timeseries" data-widget="timeseries" data-src="data/ts_free_payload.json" data-video="fig-video-free_payload-video" data-video-speed="1">
+<div class="widget-body">
+<p class="missing">No static figure for this viewer; the interactive view needs JavaScript.</p>
+</div>
+</div>
+<figcaption>Free motion with a 3 kg payload at the tool, a held-out group (the case with the median error of the feedforward PD in the group; the payload is a point mass and is not drawn), real time. The nominal feedforward does not know the payload and the PD droops under it; the learned controller infers it from the history (family means 5.0 against 20.6 mrad). The gray sphere is the commanded tool position; the metrics under each view accumulate causally; the plot cursor follows the video. <a class="source" href="media/free_payload_100x.mp4">Video (MP4)</a> <a class="source" href="data/ts_free_payload.json">Data (JSON)</a></figcaption>
+</figure>
+<figure class="video wide" id="fig-video-contact2">
+<video id="fig-video-contact2-video" controls preload="metadata" poster="media/contact2_025x-middle.png">
+<source src="media/contact2_025x.mp4" type="video/mp4">
+<p class="missing">Video playback is not supported here; <a href="media/contact2_025x.mp4">download the video (MP4)</a>.</p>
+</video>
+<div class="widget timeseries" data-widget="timeseries" data-src="data/ts_contact2.json" data-video="fig-video-contact2-video" data-video-speed="0.25">
+<div class="widget-body">
+<p class="missing">No static figure for this viewer; the interactive view needs JavaScript.</p>
+</div>
+</div>
+<figcaption>Press and slide (the median case of the tracking-tuned PD's composite, the benchmark's representative case), quarter speed, against the cap-tuned PD (the best classical controller of this family) and the privileged oracle. The reference asks for 0.4 to 1.4 cm of depth; the force plot shows the PD pressing with its full stiffness (18 N mean over the family), the oracle and the student pressing inside the 7 to 12 N band, the student with a noisier force during the slide (the detachments of light sliding contact on this plant, report 14). The impact transient at the onset, 300 to 370 N for all three, is the blind approach, not the contact law. The gray sphere is the commanded tool position; the metrics under each view accumulate causally; the plot cursor follows the video. <a class="source" href="media/contact2_025x.mp4">Video (MP4)</a> <a class="source" href="data/ts_contact2.json">Data (JSON)</a></figcaption>
+</figure>
+<figure class="video wide" id="fig-video-blocked">
+<video id="fig-video-blocked-video" controls preload="metadata" poster="media/blocked_025x-middle.png">
+<source src="media/blocked_025x.mp4" type="video/mp4">
+<p class="missing">Video playback is not supported here; <a href="media/blocked_025x.mp4">download the video (MP4)</a>.</p>
+</video>
+<div class="widget timeseries" data-widget="timeseries" data-src="data/ts_blocked.json" data-video="fig-video-blocked-video" data-video-speed="0.25">
+<div class="widget-body">
+<p class="missing">No static figure for this viewer; the interactive view needs JavaScript.</p>
+</div>
+</div>
+<figcaption>Blocked target (the median case of the tracking-tuned PD's composite, the benchmark's representative case), quarter speed: the commanded path passes 3 to 8 cm through the surface. The PD follows its error into the surface (23 N above the cap over the family); the oracle and the student stop at the surface and wait at a bounded force (5 N above the cap, apparent stiffness 390 N/m), then follow the reference when it returns. The impact transient at the onset is alike for all three: the approach is blind. The gray sphere is the commanded tool position; the metrics under each view accumulate causally; the plot cursor follows the video. <a class="source" href="media/blocked_025x.mp4">Video (MP4)</a> <a class="source" href="data/ts_blocked.json">Data (JSON)</a></figcaption>
+</figure>
+<figure class="video wide" id="fig-video-blocked_soft">
+<video id="fig-video-blocked_soft-video" controls preload="metadata" poster="media/blocked_soft_025x-middle.png">
+<source src="media/blocked_soft_025x.mp4" type="video/mp4">
+<p class="missing">Video playback is not supported here; <a href="media/blocked_soft_025x.mp4">download the video (MP4)</a>.</p>
+</video>
+<div class="widget timeseries" data-widget="timeseries" data-src="data/ts_blocked_soft.json" data-video="fig-video-blocked_soft-video" data-video-speed="0.25">
+<div class="widget-body">
+<p class="missing">No static figure for this viewer; the interactive view needs JavaScript.</p>
+</div>
+</div>
+<figcaption>Blocked target on a compliant surface of 500 N/m, a held-out group (the case with the median composite of the cap-tuned PD in the group), quarter speed. The surface yields, so the controller's stiffness sets how deep it sinks: the PD keeps its own stiffness (contact stiffness 920 N/m over the group) and pushes hardest, the oracle holds its 500 N/m spring at 15 N, and the student lies between them in this case (group mean 450 N/m) although it never saw a compliant surface in training; it chatters briefly after the release. The gray sphere is the commanded tool position; the metrics under each view accumulate causally; the plot cursor follows the video. <a class="source" href="media/blocked_soft_025x.mp4">Video (MP4)</a> <a class="source" href="data/ts_blocked_soft.json">Data (JSON)</a></figcaption>
+</figure>
+<figure class="video wide" id="fig-video-task">
+<video id="fig-video-task-video" controls preload="metadata" poster="media/task_100x-middle.png">
+<source src="media/task_100x.mp4" type="video/mp4">
+<p class="missing">Video playback is not supported here; <a href="media/task_100x.mp4">download the video (MP4)</a>.</p>
+</video>
+<div class="widget timeseries" data-widget="timeseries" data-src="data/ts_task.json" data-video="fig-video-task-video" data-video-speed="1">
+<div class="widget-body">
+<p class="missing">No static figure for this viewer; the interactive view needs JavaScript.</p>
+</div>
+</div>
+<figcaption>The task sequence (the median case of the tracking-tuned PD's composite, the benchmark's representative case), a family held out from training, real time: reach, press 1 cm, slide 10 cm, lift, transport, press 0.5 cm, lift. The force plot shows the two presses: the feedforward PD at 10 N above the cap over the family, the student at 2 N, with the oracle's profile; the impact transients at the two onsets (100 to 130 N) are blind approaches for all three. The gray sphere is the commanded tool position; the metrics under each view accumulate causally; the plot cursor follows the video. <a class="source" href="media/task_100x.mp4">Video (MP4)</a> <a class="source" href="data/ts_task.json">Data (JSON)</a></figcaption>
+</figure>
+<figure class="video wide" id="fig-video-push_win">
+<video id="fig-video-push_win-video" controls preload="metadata" poster="media/push_win_100x-middle.png">
+<source src="media/push_win_100x.mp4" type="video/mp4">
+<p class="missing">Video playback is not supported here; <a href="media/push_win_100x.mp4">download the video (MP4)</a>.</p>
+</video>
+<div class="widget timeseries" data-widget="timeseries" data-src="data/ts_push_win.json" data-video="fig-video-push_win-video" data-video-speed="1">
+<div class="widget-body">
+<p class="missing">No static figure for this viewer; the interactive view needs JavaScript.</p>
+</div>
+</div>
+<figcaption>Box pushing with the closed gripper, real time, case push-test-007: selected as the case with the median yaw reduction among the 4 of 16 pushes that fail for the PD (box turned beyond 15 degrees) and succeed for the student, which also loses 1 of the PD's 5 successes (8 successes in all). The force plot is the tool-box contact force. The box turns when the fingertip faces meet it off-centre; the student's smaller tracking error keeps the push through the box's centre. The gray sphere is the commanded tool position; the metrics under each view accumulate causally; the plot cursor follows the video. <a class="source" href="media/push_win_100x.mp4">Video (MP4)</a> <a class="source" href="data/ts_push_win.json">Data (JSON)</a></figcaption>
+</figure>
+<figure class="video wide" id="fig-video-push_fail">
+<video id="fig-video-push_fail-video" controls preload="metadata" poster="media/push_fail_100x-middle.png">
+<source src="media/push_fail_100x.mp4" type="video/mp4">
+<p class="missing">Video playback is not supported here; <a href="media/push_fail_100x.mp4">download the video (MP4)</a>.</p>
+</video>
+<div class="widget timeseries" data-widget="timeseries" data-src="data/ts_push_fail.json" data-video="fig-video-push_fail-video" data-video-speed="1">
+<div class="widget-body">
+<p class="missing">No static figure for this viewer; the interactive view needs JavaScript.</p>
+</div>
+</div>
+<figcaption>Box pushing, real time, case push-test-009: selected as the median PD yaw among the 7 of 16 pushes that fail for both controllers. The box turns for both; the low-level controller cannot correct a push line the task policy chose badly, which is why box yaw is a task-policy problem (Section 6). The gray sphere is the commanded tool position; the metrics under each view accumulate causally; the plot cursor follows the video. <a class="source" href="media/push_fail_100x.mp4">Video (MP4)</a> <a class="source" href="data/ts_push_fail.json">Data (JSON)</a></figcaption>
+</figure>
+<figure class="video wide" id="fig-video-pick">
+<video id="fig-video-pick-video" controls preload="metadata" poster="media/pick_100x-middle.png">
+<source src="media/pick_100x.mp4" type="video/mp4">
+<p class="missing">Video playback is not supported here; <a href="media/pick_100x.mp4">download the video (MP4)</a>.</p>
+</video>
+<div class="widget timeseries" data-widget="timeseries" data-src="data/ts_pick.json" data-video="fig-video-pick-video" data-video-speed="1">
+<div class="widget-body">
+<p class="missing">No static figure for this viewer; the interactive view needs JavaScript.</p>
+</div>
+</div>
+<figcaption>Pick-and-place, real time, case pick-test-013: the gripper carries a 0.3 kg block to a target, descends 2 mm below contact, releases and lifts (the case with the median placing force of the feedforward PD). The force plot is the block-table contact force: the PD presses the block onto the table with its full stiffness (14 N over the family), the student places it at 5 N and tracks the lift after the payload change with half the error. The gray sphere is the commanded tool position; the metrics under each view accumulate causally; the plot cursor follows the video. <a class="source" href="media/pick_100x.mp4">Video (MP4)</a> <a class="source" href="data/ts_pick.json">Data (JSON)</a></figcaption>
+</figure>
+
+<h2>3. The hypothesis space</h2>
+<table class="wide">
+<caption>The hypothesis space of the agenda (three parameterisations by three learning routes, extended by the two supervised routes that the deep dives added), with the outcome of every cell that was tried and the report that holds the evidence. Kept: part of the handoff controller.</caption>
+<thead>
+<tr><th>Parameterisation</th><th>Known differentiable model</th><th>Learned dynamics model</th><th>Plant gradients, actor-critic</th><th>PPO in the plant</th><th>Imitation of the privileged oracle</th><th>Ideal-robot supervision</th></tr>
+</thead>
+<tbody>
+<tr><td>Learned PD gains (gain schedule)</td><td>halves the torque rate on policy-like targets, soft everywhere (<a href="../02-known-model/index.html">02</a>); the most robust to delay and combined changes (<a href="../03-robustness/index.html">03</a>)</td><td>matches training through the known model (<a href="../04-learned-model/index.html">04</a>)</td><td>parked after protocol v1 (ADR 0005); returns as bounded multipliers inside the student (row 3)</td><td>worse than backpropagation (<a href="../05-ppo/index.html">05</a>)</td><td>—</td><td>—</td></tr>
+<tr><td>PD + torque residual</td><td>smooth tracking −36%, nothing else; the contact stage exploits the penalty contact model (<a href="../02-known-model/index.html">02</a>)</td><td>parity with the known model at a third of the cost (<a href="../04-learned-model/index.html">04</a>); learned-model gradients stable through contact, lowest blocked excess of D3 (<a href="../09-dd-gradients/index.html">09</a>)</td><td><strong>kept.</strong> beats the tuned PD on every family and group except blocked targets (<a href="../09-dd-gradients/index.html">09</a>); the base of every student; on v3 with the feedforward base and free-space selection (<a href="../17-m10-round-2/index.html">17</a>)</td><td>parity with its warm start; cuts forces by flinching at the 30 N limit (<a href="../10-dd-ppo/index.html">10</a>); small gains under the cap, apparent stiffness 1300 N/m (<a href="../11-dd-contact/index.html">11</a>)</td><td>stop-and-wait learned from the oracle (<a href="../13-dd-impedance/index.html">13</a>)</td><td>alone: wins hold and pushing, doubles the blocked composite (<a href="../15-m10-across-the-board/index.html">15</a>)</td></tr>
+<tr><td>Gain multipliers + residual</td><td>—</td><td>—</td><td>gain head stays neutral when trained by the actor-critic under the cap reward (<a href="../11-dd-contact/index.html">11</a>)</td><td>gain head never explored at exploration std 0.05 (<a href="../11-dd-contact/index.html">11</a>)</td><td><strong>kept.</strong> the student uses the gain head (0.82 in contact, 0.97 free) and lifts payloads (<a href="../13-dd-impedance/index.html">13</a>, <a href="../15-m10-across-the-board/index.html">15</a>)</td><td><strong>kept.</strong> as the free-space teacher of the two-teacher student: free motion 2.6 mrad (<a href="../17-m10-round-2/index.html">17</a>)</td></tr>
+<tr><td>Direct torque network</td><td>worst of the three (<a href="../02-known-model/index.html">02</a>); least sensitive to observation noise (<a href="../03-robustness/index.html">03</a>)</td><td>softest impacts, 37 N blocked excess, 56 mrad free motion (<a href="../09-dd-gradients/index.html">09</a>)</td><td>collapses at the contact stage under finite-difference gradients (<a href="../09-dd-gradients/index.html">09</a>); as a free-space base wins hold, presses with 85 N (<a href="../17-m10-round-2/index.html">17</a>)</td><td>untrainable (<a href="../05-ppo/index.html">05</a>)</td><td>its student loses every free-space family: a torque held for 10 ms is open-loop (<a href="../17-m10-round-2/index.html">17</a>)</td><td>not run</td></tr>
+</tbody>
+</table><p>Beyond the parameterisation-by-route matrix, the deep dives explored four further axes.</p>
+<ul>
+<li><strong>Inputs.</strong> A proprioceptive history is the implicit system identification the agenda asked for and was kept throughout (100 ms at 10 ms spacing, later with 32 ms dense). The external-torque estimate from the robot model was added in D5 and is the contact cue (D6). A target preview (future targets in the observation) added nothing beyond the classical feedforward and was shelved; a target history halved the policy-like torque rate in D3 and was not carried; Fourier features and an output low-pass were planned as a representation study and not run; a tool-frame wrench was shelved for its sim-to-real gap.</li>
+<li><strong>Rewards.</strong> Instantaneous force penalties (D2) destabilised training and were an optimisation failure as weighted; filtered force terms (D5) still cost free-space tracking unless detached from the gradient; the cap reward with contact-maintenance terms ranked a compliant exemplar first but no optimiser found that behaviour; the final recipe uses the reward only for free space and specifies contact as a law.</li>
+<li><strong>Protocol and plant.</strong> Protocol v1 (nominal robot, six regimes), v2 (instances, payloads, blocked targets, the 15 N cap, stop-and-wait, release metrics), v3 (gripper, press band 7 to 12 N, link clearance, task families). Three harness defects were found by probes and corrected with errata: blocked references without a block (60% of them), link collisions on the wall branch, and an evaluation worker that ignored the case's perturbation.</li>
+<li><strong>Classical additions.</strong> The inverse-dynamics feedforward of the reference halves the tracking-tuned PD's free-motion error (8.8 to 4.9 mrad) and was, until the two-teacher student, worth more than any learned part on that family; phase-scheduled gains (M6) cut impact peaks at the price of torque spikes and failed with a payload.</li>
+</ul><h3>3.1 Chronology</h3>
+<table class="wide">
+<caption>Chronology of the seventeen reports (2026-11-15 to 2026-11-16). Protocol v1 numbers (nominal robot, sphere tool) and v2 numbers (instances, sphere tool) are not comparable with v3 numbers (instances, gripper).</caption>
+<thead>
+<tr><th>Report</th><th>Stage</th><th>Question</th><th>Result</th><th>Status</th></tr>
+</thead>
+<tbody>
+<tr><td><a href="../01-baselines/index.html">01</a></td><td>Milestone 1</td><td>Is there headroom over shared PD gains?</td><td>Per-regime tuning cuts position error by 55 to 65% and torque rate by 73% on policy-like targets; the tuned sets are mutually incompatible.</td><td>complete, protocol v1</td></tr>
+<tr><td><a href="../02-known-model/index.html">02</a></td><td>Milestone 2</td><td>Do the three parameterisations capture it through a differentiable model?</td><td>No. The residual improves smooth tracking only; the contact stage of training exploits the penalty contact model.</td><td>negative result, investigated</td></tr>
+<tr><td><a href="../03-robustness/index.html">03</a></td><td>Milestone 3</td><td>Robustness to changed dynamics and randomisation</td><td>A 5 ms delay breaks the stiff PD (composite ×6.5), learned gains are unaffected; randomisation helps neural torque only.</td><td>complete, v1</td></tr>
+<tr><td><a href="../04-learned-model/index.html">04</a></td><td>Milestone 4</td><td>Can a learned model replace the known one as the training medium?</td><td>Yes: 100 ms predictions within 2 to 14 mrad, gradient cosine 0.96, equal closed-loop results at a third of the cost.</td><td>complete, v1</td></tr>
+<tr><td><a href="../05-ppo/index.html">05</a></td><td>Milestone 5</td><td>PPO against the model-based routes</td><td>Worse for every parameterisation; neural torque untrainable; 4.5 M plant steps per run.</td><td>negative, budget-limited</td></tr>
+<tr><td><a href="../06-phases/index.html">06</a></td><td>Milestone 6</td><td>Phase-scheduled gains on multi-phase trajectories</td><td>Scheduling cuts impact peaks (241 to 82 N) but spikes torque at switches and fails with a payload.</td><td>complete, v1</td></tr>
+<tr><td><a href="../07-dd-baselines/index.html">07</a></td><td>Deep dive D1</td><td>Fixed PD under protocol v2 (instances, payloads, blocked targets)</td><td>No fixed gain set is both accurate and compliant; the soft set sags under payloads (hold 16.7 against 2.8 mrad).</td><td>complete, v2; two errata</td></tr>
+<tr><td><a href="../08-dd-controllers/index.html">08</a></td><td>Deep dive D2</td><td>1 kHz residual and neural torque through MuJoCo gradients</td><td>They infer the payload from the history (hold 3.4 to 5 mrad) but are not compliant on blocked targets; force terms destabilise training.</td><td>seed 0 only</td></tr>
+<tr><td><a href="../09-dd-gradients/index.html">09</a></td><td>Deep dive D3</td><td>Actor-critic, median-clipped gradients, learned-model gradients</td><td>The residual beats the tuned PD on every family and group; its blocked excess force equals the PD's. The recipe of the base.</td><td>complete, v2</td></tr>
+<tr><td><a href="../10-dd-ppo/index.html">10</a></td><td>Deep dive D4</td><td>PPO in the plant from the D3 residual</td><td>Parity with the warm start; forces cut by a learned flinch; contact maintenance not improved; two-case validation misranks.</td><td>closed</td></tr>
+<tr><td><a href="../11-dd-contact/index.html">11</a></td><td>Deep dive D5</td><td>Contact maintenance under a 15 N cap</td><td>Three harness defects fixed; PPO under the cap pushes less but stays stiff; the gain head is never explored.</td><td>stopped by the advisor; blocked target redefined</td></tr>
+<tr><td><a href="../12-checkpoint-1/index.html">12</a></td><td>Checkpoint 1</td><td>Standalone summary</td><td>The learned residual beats the tuned PD everywhere and limits forces; it neither presses to a target nor waits when blocked.</td><td>checkpoint</td></tr>
+<tr><td><a href="../13-dd-impedance/index.html">13</a></td><td>Deep dive D6</td><td>Impedance by imitation of a privileged oracle</td><td>The oracle's law distilled by DAgger gives stop-and-wait (57 to 15 N above the cap; 527 N/m); the external torque is the contact cue; PPO adds nothing.</td><td>complete, v2</td></tr>
+<tr><td><a href="../14-m9-plant-v3/index.html">14</a></td><td>Milestone 9</td><td>Plant v3 (gripper), protocol v3, task families</td><td>Baselines on the gripper plant; the sphere-plant student transfers its contact behaviour; light-contact detachment persists on the pads.</td><td>complete, v3</td></tr>
+<tr><td><a href="../15-m10-across-the-board/index.html">15</a></td><td>Milestone 10</td><td>One learned controller against the best classical, across the board</td><td>27 of 33 rows met; every miss is free motion against the feedforward PD (11.9 against 4.9 mrad).</td><td>complete, v3</td></tr>
+<tr><td><a href="../16-checkpoint-2/index.html">16</a></td><td>Checkpoint 2</td><td>Standalone summary (revised after round 2)</td><td>The two-teacher student as the headline controller.</td><td>checkpoint</td></tr>
+<tr><td><a href="../17-m10-round-2/index.html">17</a></td><td>Milestone 10, round 2</td><td>The free-motion gap, a torque network, two teachers</td><td>Feedforward base, free-space base and 7 N floor: 29 rows; two teachers: 2.6 mrad free motion, 28 rows; the torque network fails as a student.</td><td>complete, v3</td></tr>
+</tbody>
+</table>
+
+<h2>4. What worked, and why</h2>
+<ol>
+<li><strong>A proprioceptive history identifies the payload.</strong> From the first 1 kHz residual on (D2), learned controllers held a loaded arm at 3.4 to 5 mrad where the soft PD sagged to 16.7; on the 3 kg held-out payload the handoff controller tracks free motion at 5.0 against 20.6 mrad. The mechanism is implicit identification from the history, as the agenda anticipated.</li>
+<li><strong>Gradients through the plant, if tamed.</strong> Backpropagation through MuJoCo's finite-difference derivatives works once the chained Jacobians through contact are clipped per sample at a multiple of the batch median, the horizon is short with a critic bootstrap (gamma 0.995, ramped in), the tracking kernels are bounded (20 mrad) and the torque-rate penalty is light (0.003; at 0.03 it dominated the objective and the residual gained by softening). With those four elements the residual beats the tuned PD on every family and group of protocol v2 (D3) and is the base of every later student.</li>
+<li><strong>Specify the contact behaviour, then imitate it.</strong> The wanted response was written as a law, a force-bounded spring on the actual error with stop-and-wait when blocked, executed by a privileged oracle, validated against the metrics, and distilled by DAgger in ten minutes per seed: blocked excess force 57 to 15 N on the sphere plant, and on the gripper 5 N against 23 for the best classical and 43 for the student's own base, apparent stiffness 1440 to 390 N/m, and a contact stiffness near the teacher's 500 N/m on held-out compliant surfaces where the PD keeps its own 1 kN/m. Five rounds of reinforcement learning never found this behaviour by exploration and did not improve it once found.</li>
+<li><strong>The external torque is the cue.</strong> The link-side torque minus the model's prediction detects contact within 50 ms for 93 to 97% of onsets (error and velocity cues: 61 to 78%), and separates contact from a payload once payload-carrying free motion is in the fit set. Without it the features of the residual carried contact only through the accumulated error, 0.7 s late.</li>
+<li><strong>Protect the base during distillation.</strong> With the teacher driving only once and free-space decisions weighted three times, the student keeps its base's free space within 3%; the first recipe (the teacher driving in three iterations, unweighted labels) gave up 20 to 40% of it.</li>
+<li><strong>Give the learned controller the model term.</strong> The nominal inverse-dynamics feedforward in the PD base, a free-space-only base and selection on free space took the student from 11.9 to 6.9 mrad; the student reproduces its base, so what remained was the base's reward.</li>
+<li><strong>Ideal-robot labels as the free-space teacher, referenced to the nominal law.</strong> Supervised labels that make the sampled plant reproduce the nominal robot's response halve the feedforward PD's error (2.6 mrad) and hold at 1.6 against 8.1, in every seed, provided the label is taken relative to the nominal law rather than the student's own command (item 6 of Section 5).</li>
+<li><strong>Keep the 1 kHz loop under the learned part.</strong> The residual form rides on the PD between decisions and under latency: the students move by at most 5% at 5 ms. The same history, same training, same teachers with a direct torque output lose every free-space family (Section 5, item 2).</li>
+<li><strong>Contact behaviour transfers across plants.</strong> The student trained on the sphere plant ran unchanged on the gripper plant and kept its contact behaviour (2.3 N above the cap on blocked targets); its free-space edge did not transfer and was restored by retraining.</li>
+</ol>
+
+<h2>5. What did not work, and why</h2>
+<p>Each item is an investigated negative result unless marked budget-limited; the mechanism is stated where it was established from saved episodes, reward decompositions or probes.</p>
+<ol>
+<li><strong>Training through the penalty-contact torch model (M2).</strong> Validation in the plant worsened whenever the contact stage entered training while the in-model loss fell: exploitation of the contact approximation. Superseded by the plant as the medium; free-space training through the model was fine, and a learned model matched it (M4).</li>
+<li><strong>Direct torque networks.</strong> The worst parameterisation through the known model (M2), untrainable by PPO (M5), 136 to 141 N blocked excess at 1 kHz (D2), collapsed at the contact stage under finite-difference gradients (D3), and in round 2 the best hold tracker as a base yet the worst student: its torque is open-loop for the 10 ms it is held, it chatters at 1953 Nm/s, and a 5 ms latency degrades it threefold. One architecture and recipe were tried; the result is about this recipe.</li>
+<li><strong>Reinforcement learning, five rounds.</strong> PPO was worse than backpropagation for every parameterisation under protocol v1 (M5); in the plant it reached parity with its warm start and cut forces by a flinch at the reward's soft limit (D4); under the cap reward it pushed less but stayed stiff and never explored the gain head (D5); it neither improved the distilled students nor produced stop-and-wait from the D5 arm (D6). The training return rose in every round while the protocol's contact composites did not follow. The diagnosis from saved episodes: yielding at a blocked surface is a large, coordinated residual torque that no optimiser found by exploration, and on sliding references the reward preferred intermittent light contact. Budget per round was small (150 to 300 updates); the pattern was the same in each.</li>
+<li><strong>Force penalties as reward terms.</strong> Instantaneous terms made the contact-stage gradients three to four times larger and noisier and trained worse than the no-force twins (D2); filtered terms attached to the gradient cost free-space tracking three times in a row (D5). Detached from the gradient they were harmless and taught the features to sense contact, but they did not produce compliance.</li>
+<li><strong>Selection on the cap composite for a base.</strong> The actor-critic residual's best checkpoint under the cap composite was a contact-stage iteration whose free space was half as good as its stage-1 optimum (M10). A selection rule changes what a method is; the base is now selected on free space and the contact behaviour is the student's.</li>
+<li><strong>Ideal-robot labels under the student's own command.</strong> Labelling the torque the plant needs under the student's full command lets the target drift with the student's residual: every DAgger iteration degraded hold and free motion (M10's ideal-robot run; the first two-teacher form). Referenced to the nominal law the same labels are the best free-space teacher.</li>
+<li><strong>Learned gains without a residual, phase-scheduled gains, the target preview.</strong> Gain schedules alone went soft everywhere (M2); hand-scheduled gains spike torque at switches and sag under a payload (M6); a preview of future targets adds nothing beyond the classical feedforward (D6). The bounded gain multipliers survive only as a head next to the residual.</li>
+<li><strong>Small validation sets.</strong> Two cases per family misranked the contact arms of D4 against the 16-case test set; eight cases per contact family (two to four per free-space family) are used since, and no ranking is claimed from training-time validation.</li>
+</ol>
+
+<h2>6. Where the gaps are</h2>
+<ol>
+<li><strong>Policy-like targets, the one miss.</strong> At 1.05 to 1.06 of the best classical in every group, with better tracking and a higher torque rate. The ideal-robot labels are dropped where the nominal law saturates, which is exactly at target jumps, so the student's behaviour there is the base's; nothing in the labels asks for smoothness.</li>
+<li><strong>The press band against the cap.</strong> The 7 N floor puts pressing inside the 7 to 12 N band (10.6 N mean) at 5 N above the 15 N cap on the sliding families, where light contact at 9 to 15 N detaches 20 to 70 times per slide for every controller on both plants (report 14). The contact-loss metric on sliding families measures the simulator as much as the controller; the plant question comes before further tuning of the teacher.</li>
+<li><strong>Task success on sixteen cases.</strong> Push success 52% against 31% is eight or nine boxes against five; box yaw is the failure for every controller and is a task-policy problem. Placement is at the ceiling for everyone, so the task half of the criterion is met on one task and tied on the other.</li>
+<li><strong>Privileged supervision.</strong> Both teachers use what only a simulator gives: the oracle knows the surface and the payload; the ideal-robot label is the sampled plant's inverse dynamics. On hardware the oracle's role could be taken by a force-sensed or estimated impedance law, and the ideal-robot label needs a system identification or a learned plant model (Milestone 4's model is the candidate). Neither path has been built.</li>
+<li><strong>Contact sensing stays weak in the features.</strong> Linear probes decode contact from the trunk features at 0.71 to 0.76 balanced accuracy for every controller, students included, although the behaviour is right; the external-torque input carries the cue, the features do not represent it explicitly.</li>
+<li><strong>The classical bar is modest.</strong> Forty CMA-ES iterations on four cases per family, one tuning seed, a feedforward from the nominal model without instance adaptation. A better-tuned classical set, or an adaptive classical law, would raise the bar the learned controller is measured against.</li>
+<li><strong>The ceiling is the teacher.</strong> The student reaches the oracle's contact composites; whether a better contact law exists is not tested, since the oracle's parameters (500 N/m, 0.7 damping ratio, 200 ms blend) were set once from hardware practice.</li>
+<li><strong>Smoothness and error bursts.</strong> The student's torque rate in free motion is above the stiff PD's (159 against 115 Nm/s) and higher in contact; it is within the protocol's weight but not a win. In free motion the student also shows transient error bursts on single joints in a few cases (peaks of 24 to 47 mrad across seeds where the feedforward PD peaks at 6), which cost it the cases where the nominal model is already accurate (Section 2.4, free-motion clip); the ideal-robot labels teach the model correction, not a bound on the correction's rate.</li>
+<li><strong>Not attempted.</strong> The real robot (Milestone 7, unauthorised), a second robot and task conditioning (Milestone 8), the representation study, and every claim rests on three seeds and sixteen test cases per family.</li>
+</ol>
+
+<h2>7. What to revisit when scaling up</h2>
+<p>The recipe was developed on a laptop with runs of under an hour. The following items were set once, at that budget, and are where more data, iterations and compute should go first. Each is a question with a measurable answer under the existing protocol.</p>
+<ol>
+<li><strong>Replication before anything else.</strong> Five or more seeds per method, 64 or more test cases per family and per task, and three tuning seeds of the classical set with a larger CMA-ES budget. The paired intervals of the present wins are the evidence to read; several contact-family wins are large, the task win and the policy-like miss are not.</li>
+<li><strong>The base's budget and reward (item E, not run).</strong> 250 iterations of 24 windows were enough for the base to reach 6.9 mrad; the kernel half-width (20 mrad) and the torque-rate weight (0.003) were chosen at that budget and do not distinguish 5 from 7 mrad. With more iterations and batch, re-tune both and test whether the base alone closes the free-motion gap, which would make the ideal-robot teacher unnecessary.</li>
+<li><strong>Distillation budget.</strong> Twelve iterations of 48 episodes with a 300 thousand-row cap, four epochs per iteration, a teacher-driving schedule of one iteration and a free-space weight of 3, all set once. Scale the rows with the data, lengthen the schedule, and add a smoothness term to the free-space labels (or the oracle's labels on the policy-like family) for the one miss.</li>
+<li><strong>The training distribution.</strong> Instances and payloads are sampled inside the evaluation ranges by design; compliant surfaces, the task sequence and the held-out workspace are not trained on. With more compute, widen the surface geometries, speeds and payloads of training while keeping at least one group held out per axis so the generalisation claims survive.</li>
+<li><strong>Validation.</strong> Two to four free-space and eight contact cases per family select checkpoints; every checkpoint is kept. With compute, validate on more cases and report the selection rule with the alternative checkpoint, since selection changed what two methods looked like (Section 5, item 5).</li>
+<li><strong>The learned model as the medium.</strong> Learned-model gradients matched the known model (M4) and were stable through contact at a third of the cost (D3); on a cluster the finite-difference gradients, whose cost grows with the state dimension, are the expensive part of stage 1. The learned model is also the hardware path of the ideal-robot label (a learned plant model in place of the sampled plant's inverse dynamics).</li>
+<li><strong>The teacher.</strong> Sweep the oracle's stiffness, floor and blend against the band and the cap, and settle the plant's light-contact detachment (a finite contact patch or a different pad model) before the sliding families are used as evidence.</li>
+<li><strong>Architecture, untouched since ADR 0005 and 0007.</strong> History length and stride, width 128 and two layers, the 10 ms decision period, the output bounds, an output low-pass and Fourier features. None was varied on plant v3; a representation study is cheap next to training and was deferred twice.</li>
+<li><strong>Beyond the protocol.</strong> More tasks and task conditioning (Milestone 8), a second robot with its own model and controller, and the real robot once authorised, where the inputs and outputs of the controller are already those a Panda exposes and the open question is the supervision (item 4 of Section 6).</li>
+</ol>
+
+<h2>8. What a run costs</h2>
+<table class="wide">
+<caption>What a run costs on the development machine. Every learned result of the handoff controller was produced by the first four rows, three seeds each; the figures are from the run logs of runs/m9 and runs/m10r2.</caption>
+<thead>
+<tr><th>Stage</th><th>Configuration</th><th>Simulated data</th><th>Wall-clock on the laptop (M5 Pro, 15 cores, CPU MuJoCo)</th></tr>
+</thead>
+<tbody>
+<tr><td>Shared PD gains, CMA-ES</td><td>40 iterations, 4 cases per family</td><td>13 400 episodes</td><td>20 min</td></tr>
+<tr><td>Stage 1: residual by actor-critic through the plant</td><td>250 iterations × 24 windows of 2 s; finite-difference gradients</td><td>12 M plant steps (plus the finite-difference evaluations)</td><td>57 min with six runs sharing the machine (40 min for the torque network)</td></tr>
+<tr><td>Stage 2: student by DAgger</td><td>12 iterations × 48 episodes; 4 epochs per iteration</td><td>270 to 300 k labelled decisions (cap 300 k)</td><td>11 to 13 min per seed</td></tr>
+<tr><td>Benchmark, protocol v3 in full</td><td>448 episodes per controller (10 groups), 23 controllers</td><td>10 300 episodes</td><td>21 min with 12 workers</td></tr>
+<tr><td>PPO in the plant (D4, for comparison)</td><td>300 updates × 64 windows of 2 s</td><td>38 M plant steps per run</td><td>18 min alone, 3.6 s per update; 57 s per update with sixteen runs</td></tr>
+<tr><td>Backpropagation through the torch model (M2, for comparison)</td><td>360 iterations, batch 24, 2.5 ms model step</td><td>model steps only</td><td>tens of minutes</td></tr>
+</tbody>
+</table>
+
+<h2>9. Pointers</h2>
+<ul>
+<li><strong>Project documents (private; not part of the public release).</strong> <a href="../research/index.html">Research agenda</a> (the agenda, approved milestones and the integrity rules), <a href="../context/index.html">Current context</a> (scientific state, blockers, pending proposals), <a href="../adr/index.html">Decisions</a> (ten decision records; ADR 0010 holds the criterion and the round-2 amendment), <a href="../protocols/evaluation-v3/index.html">Protocol v3</a> (families, groups, metrics, composites); the metrics and composites are also defined in <code>llc/eval/metrics.py</code>.</li>
+<li><strong>Reports.</strong> <a href="../15-m10-across-the-board/index.html">report 15</a>, <a href="../17-m10-round-2/index.html">report 17</a> and <a href="../16-checkpoint-2/index.html">Checkpoint 2</a> for the final evidence; <a href="../13-dd-impedance/index.html">report 13</a> for the contact law and the cue audit; <a href="../09-dd-gradients/index.html">report 09</a> for the training recipe of the base; <a href="../14-m9-plant-v3/index.html">report 14</a> for the plant and the task families.</li>
+<li><strong>Code.</strong> Controllers in <code>llc/controllers/</code> (PD, feedforward PD, the oracle, the learned controller with its latency queue); the policy, history buffer, actor-critic, distillation and ideal-robot labels in <code>llc/learning/</code>; references, cases, metrics and the parallel evaluation in <code>llc/eval/</code> and <code>llc/references.py</code>; the two plants, instances, gripper and tasks in <code>llc/sim/</code>. Training entry points: <code>experiments/m1_tune_gains.py</code> (gains), <code>experiments/d2_train.py --feedforward --val-objective free</code> (stage 1), <code>experiments/d7_distill.py --free-teacher ideal</code> (stage 2); the benchmark <code>experiments/d_evaluate.py</code> and the report builders <code>experiments/d_report.py</code>, <code>experiments/checkpoint_2.py</code>, <code>experiments/handoff.py</code>. The launchers of the final runs are tracked under <code>runs/m9/</code>, <code>runs/m10/</code> and <code>runs/m10r2/</code>; the checkpoints, metrics, logs and episodes under <code>runs/</code> are not under version control.</li>
+<li><strong>Environment.</strong> <code>uv</code> manages the dependencies; run with <code>PYTHONPATH=. uv run --no-sync</code> and <code>LLC_PLANT=v3</code>; the notebook is built by <code>research/build.py</code> from <code>research/reports/</code> and <code>research/catalog.json</code>; 65 tests in <code>tests/</code>.</li>
+</ul>

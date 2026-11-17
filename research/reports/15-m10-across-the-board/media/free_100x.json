@@ -1,0 +1,73 @@
+{
+  "path": "research/reports/15-m10-across-the-board/media/free_100x.mp4",
+  "record": "research/reports/15-m10-across-the-board/media/free_100x.json",
+  "frames": 196,
+  "fps": 50,
+  "speed": 1.0,
+  "duration_s": 3.92,
+  "width": 2016,
+  "height": 750,
+  "resolution": [
+    2016,
+    750
+  ],
+  "view_size": [
+    480,
+    360
+  ],
+  "camera": "side",
+  "title": "Free joint-space motion, case free-test-011",
+  "plot_series": [
+    "pos_err",
+    "f_normal",
+    "tau2"
+  ],
+  "t_start": 0.0,
+  "t_end": 3.9,
+  "sample_step": 20,
+  "sample_rate_hz": 1000.0,
+  "posters": {
+    "first": "research/reports/15-m10-across-the-board/media/free_100x-first.png",
+    "middle": "research/reports/15-m10-across-the-board/media/free_100x-middle.png",
+    "last": "research/reports/15-m10-across-the-board/media/free_100x-last.png"
+  },
+  "episodes": [
+    {
+      "method": "pd_shared",
+      "label": "PD tuned on the tracking composite",
+      "npz": "runs/m10/episodes_test/free-test-011__pd_shared.npz",
+      "sha256": "01feb9fabd2f5127c15e7b6d88f0e4018c4d98d897c1b343861d6573abdd3ce8",
+      "joint_rmse_mrad": 8.349678361935373,
+      "peak_normal_force_n": 0.0
+    },
+    {
+      "method": "pd_feedforward",
+      "label": "PD + inverse-dynamics feedforward",
+      "npz": "runs/m10/episodes_test/free-test-011__pd_feedforward.npz",
+      "sha256": "b95105d5fa9d9af563d7dc92fe202ddab58be0d225024a09f1b279c0d6bb4d40",
+      "joint_rmse_mrad": 1.1056014768058107,
+      "peak_normal_force_n": 0.0
+    },
+    {
+      "method": "oracle_pd",
+      "label": "Oracle around the PD (privileged ceiling)",
+      "npz": "runs/m10/episodes_test/free-test-011__oracle_pd.npz",
+      "sha256": "01feb9fabd2f5127c15e7b6d88f0e4018c4d98d897c1b343861d6573abdd3ce8",
+      "joint_rmse_mrad": 8.349678361935373,
+      "peak_normal_force_n": 0.0
+    },
+    {
+      "method": "m9_distill_gain_ext",
+      "label": "Distilled impedance student (free-space fix)",
+      "npz": "runs/m10/episodes_test/free-test-011__m9_distill_gain_ext-s0.npz",
+      "sha256": "6bb52991a1983d02a21b266947d5acf8015f85cba6a3eb52a93d9f7e54bebaca",
+      "joint_rmse_mrad": 13.100366143106575,
+      "peak_normal_force_n": 0.0
+    }
+  ],
+  "reference": "gray sphere: commanded tool position, q_ref through llc.sim.nominal.NominalModel",
+  "trace": "measured tool path over the last 0.5 s, gray (old) to method color (new)",
+  "metrics": "joint RMSE over all joints and samples from t = 0 to the displayed time (mrad); peak normal force so far (N)",
+  "scene": "llc/sim/assets/panda_2f85_0800.xml",
+  "render_seconds": 4.71
+}

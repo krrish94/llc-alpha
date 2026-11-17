@@ -1,0 +1,545 @@
+<h2>Question</h2>
+<p>Report D2 found that first-order training through the simulator's finite-difference gradients did not produce compliance: the force term's gradient through contact was heavy-tailed, the truncated windows carried no value beyond 100 to 250 ms, and the unbounded tracking term let infeasible windows dominate. The literature on learned-model and simulator gradients (SuperMimic, DMO, ∇Mimic, BlinkMimic) suggests three fixes in order of cost: a short-horizon actor-critic with bounded tracking kernels, gradients from a learned dynamics model fit online along the plant's own trajectories, and per-sample clipping of simulator gradients. Does any of them produce a learned controller that yields on blocked targets while matching the tuned PD elsewhere?</p>
+
+<h2>Erratum</h2>
+<p><strong>Erratum 2 (2026-11-16, blocked family).</strong> The blocked-reference generator tested 'inside the surface' with the wrong sign for the table surface (60% of the blocked references, ADR 0007): those references had empty blocked and release phases, so their training windows in reports D2 to D4 contained no block at all (they started at the end of the reference), and their recovery metric was undefined and counted as zero in the composite. The generator is fixed, the reference pools were rebuilt and the test tables of this report were regenerated from the corrected cases. For the tuned PD the blocked composite moves from 7.10 to 7.62; for the rate-light residual with the 20 mrad kernel from 6.94 to 8.51 (recovery after release 0.80 s against 0.33 s for the PD, feasible-direction error 25 against 38 mm, excess force unchanged at 23.3 against 22.5 N). The statement that this residual is at parity with the PD on blocked targets is therefore withdrawn: it yields no better and recovers more slowly. The other families are unchanged.</p>
+<p><strong>Erratum 3 (2026-11-16, wall surface).</strong> In the wall branch of the blocked and contact families the tool pointed 50 to 70 degrees below horizontal with targets up to 8 cm inside the wall, so the hand and the forearm reached the wall before the tool: link contact during 65 to 85% of the blocked phase, and in three of seven wall validation cases the tool never touched the wall. Those cases measured unsensed link collisions. The generators now tilt the tool 30 to 45 degrees, place wall targets 3 to 6 cm deep and reject any reference whose deepest pose brings a link within 2 cm of the wall (ADR 0007); PD rollouts confirm tool contact for 93 to 98% of the blocked phase and no link contact. The tables of this report were regenerated a second time from the corrected wall cases: the PD's blocked composite moves to 9.09 and the rate-light residual's to 10.23 (contact family 7.16 against 4.40); the ordering of the previous erratum stands.</p>
+<p>Every protocol v2 number produced before 2026-11-16 (reports D1 and D2, the training-time validations and the first partial numbers of this report) came from an evaluation harness that simulated the nominal robot for every case, ignoring the case's instance and payload (ADR 0005, erratum). Everything in this report is evaluated with the corrected harness, in which each case runs on its own robot instance, payload and sensor noise. Arms trained before the fix selected their checkpoints on the nominal-plant validation; the three D3 arms of the first reward are therefore reported from their last checkpoints, and the later arms were restarted after the fix.</p>
+
+<h2>Setup</h2>
+<p>All arms keep protocol v2 (ADR 0005): 1 kHz control with zero latency, per-window robot instances and payloads, the same training families, curriculum and budget (500 iterations of 24 windows of 2 s; the imagined-gradient arm runs 1000 iterations because its iterations cost a fifth). What changes is the training objective and the gradient source.</p>
+<p><strong>Objective.</strong> Short-horizon actor-critic: each 100 ms chunk's return of bounded exponential tracking kernels (position half-width 50 mrad or, in one arm, 20 mrad; velocity 0.5 rad/s) minus torque, torque-rate and contact-force penalties and a weak linear restoring term, bootstrapped by a critic that sees the state, the touch force, the payload and a 500 ms reference preview; the critic is fit to TD(0.95) targets each iteration. The first three arms used a torque-rate weight of 0.03 at a scale of 500 Nm/s; the decomposition below showed that this term dominated the objective, and the later arms use 0.003.</p>
+<p><strong>Gradient sources.</strong> Finite differences through MuJoCo with per-sample clipping of the state gradient at three times the batch median (∇Mimic); learned-model gradients, where the plant still produces every state while the backward pass uses a one-step dynamics network (three hidden layers of 512, instance context as input, velocity increment and touch force as outputs) fit online to the replay of the plant's transitions (DMO, straight-through); and imagined rollouts, where both passes run in the learned model and the plant is only used every fourth iteration to collect transitions for the fit. Finite differences with a fixed clip (the first D3 attempt) collapsed as soon as contact windows entered the curriculum and are shown only in the training curves.</p>
+<p><strong>Observation variants.</strong> One arm adds the history of the position target over the same two-scale windows (relative to the current target) to the observation: still position targets only, but the controller can form a target acceleration and compare the target's motion with its own.</p>
+<p><strong>Checkpoints.</strong> Arms trained after the erratum fix keep every validated checkpoint and are reported from the one with the best validation composite (14 fixed cases, corrected plant); the three arms of the first reward are reported from their last checkpoint (iterations 349, 299 and 349; they stopped at a validation after a code edit, ADR 0005).</p>
+
+<h2>Training</h2>
+<p>One line per run. Validation uses 14 fixed protocol v2 cases in the plant with their own instances and payloads; the finite-difference arms without median clipping are the two that collapse.</p>
+<figure id="fig-training" class="wide">
+<img src="figures/training.svg" alt="Mean step reward in the training medium (bounded kernels minus penalties, summed over a 2 s window and scaled by 1/100), validation composite and validation excess force in the plant (14 fixed cases every 50 iterations). The gray dashed line is the protocol v2 PD on the same validation cases in the corrected plant; the validation of the three first-reward arms and of the collapsing finite-difference arms ran on the nominal robot (erratum, ADR 0005) and is not comparable to it, the rate-light arms&#x27; validation is. Vertical lines mark curriculum stage changes; the reward axis is cut at −30 (the collapsing arms fall to −120). Dotted: finite-difference gradients with fixed clipping; solid: per-sample median clipping; dashed: learned-model gradients; dash-dotted: median clipping with the 20 mrad kernel.">
+<figcaption>Mean step reward in the training medium (bounded kernels minus penalties, summed over a 2 s window and scaled by 1/100), validation composite and validation excess force in the plant (14 fixed cases every 50 iterations). The gray dashed line is the protocol v2 PD on the same validation cases in the corrected plant; the validation of the three first-reward arms and of the collapsing finite-difference arms ran on the nominal robot (erratum, ADR 0005) and is not comparable to it, the rate-light arms' validation is. Vertical lines mark curriculum stage changes; the reward axis is cut at −30 (the collapsing arms fall to −120). Dotted: finite-difference gradients with fixed clipping; solid: per-sample median clipping; dashed: learned-model gradients; dash-dotted: median clipping with the 20 mrad kernel.</figcaption>
+</figure>
+
+<h2>What the reward rewards</h2>
+<p>Why the trained residual tracks loosely: a per-term decomposition of the training reward for the PD base (zero residual) and the trained checkpoint on identical windows.</p>
+<table>
+<caption>Mean step reward (times 100) and its terms on 16 identical 2 s windows per curriculum stage, in the training medium (random instances and payloads). Position kernel half-width 50 mrad, torque-rate weight 0.03 and scale 500 Nm/s as used by the runs/d3 arms. The trained residual scores above its initialization only by shrinking the torque-rate term; its position kernel is lower on every stage.</caption>
+<thead>
+<tr><th>Windows</th><th>Policy</th><th class="num">Total</th><th class="num">position kernel</th><th class="num">velocity kernel</th><th class="num">torque</th><th class="num">torque rate</th><th class="num">contact force</th><th class="num">force rate</th><th class="num">linear restoring</th></tr>
+</thead>
+<tbody>
+<tr><td>stage 0 (free 9, hold 7)</td><td>PD base (zero residual)</td><td class="num">1</td><td class="num">0.826</td><td class="num">0.295</td><td class="num">-0.00621</td><td class="num">-0.0755</td><td class="num">0</td><td class="num">0</td><td class="num">-0.0382</td></tr>
+<tr><td>stage 0 (free 9, hold 7)</td><td>PD + residual, AC, median clipping</td><td class="num">0.893</td><td class="num">0.708</td><td class="num">0.292</td><td class="num">-0.0062</td><td class="num">-0.0475</td><td class="num">0</td><td class="num">0</td><td class="num">-0.0537</td></tr>
+<tr><td>stage 1 (free 6, policy 1, step 9)</td><td>PD base (zero residual)</td><td class="num">0.287</td><td class="num">0.742</td><td class="num">0.266</td><td class="num">-0.00753</td><td class="num">-0.663</td><td class="num">0</td><td class="num">0</td><td class="num">-0.0503</td></tr>
+<tr><td>stage 1 (free 6, policy 1, step 9)</td><td>PD + residual, AC, median clipping</td><td class="num">0.636</td><td class="num">0.678</td><td class="num">0.267</td><td class="num">-0.00745</td><td class="num">-0.244</td><td class="num">0</td><td class="num">0</td><td class="num">-0.0581</td></tr>
+<tr><td>stage 2 (blocked 5, contact2 1, free 3, policy 6, step 1)</td><td>PD base (zero residual)</td><td class="num">-0.515</td><td class="num">0.572</td><td class="num">0.251</td><td class="num">-0.0102</td><td class="num">-1.19</td><td class="num">-0.057</td><td class="num">-0.00773</td><td class="num">-0.07</td></tr>
+<tr><td>stage 2 (blocked 5, contact2 1, free 3, policy 6, step 1)</td><td>PD + residual, AC, median clipping</td><td class="num">0.282</td><td class="num">0.534</td><td class="num">0.254</td><td class="num">-0.0109</td><td class="num">-0.38</td><td class="num">-0.0265</td><td class="num">-0.00825</td><td class="num">-0.0795</td></tr>
+</tbody>
+</table>
+
+<h2>Representative episodes</h2>
+<p>One case per family (median composite of the protocol v2 PD); contact families also at quarter speed.</p>
+<figure class="video wide" id="fig-video-hold_100x">
+<video id="fig-video-hold_100x-video" controls preload="metadata" poster="media/hold_100x-middle.png">
+<source src="media/hold_100x.mp4" type="video/mp4">
+<p class="missing">Video playback is not supported here; <a href="media/hold_100x.mp4">download the video (MP4)</a>.</p>
+</video>
+<div class="widget timeseries" data-widget="timeseries" data-src="data/ts_hold.json" data-video="fig-video-hold_100x-video" data-video-speed="1">
+<div class="widget-body">
+<p class="missing">No static figure for this viewer; the interactive view needs JavaScript.</p>
+</div>
+</div>
+<figcaption>Hold: representative case hold-test-003 (median composite of the shared PD) at 1x; the gray sphere is the commanded tool position, metrics accumulate causally; the plot cursor follows the video. <a class="source" href="media/hold_100x.mp4">Video (MP4)</a> <a class="source" href="data/ts_hold.json">Data (JSON)</a></figcaption>
+</figure>
+<figure class="video wide" id="fig-video-free_100x">
+<video id="fig-video-free_100x-video" controls preload="metadata" poster="media/free_100x-middle.png">
+<source src="media/free_100x.mp4" type="video/mp4">
+<p class="missing">Video playback is not supported here; <a href="media/free_100x.mp4">download the video (MP4)</a>.</p>
+</video>
+<div class="widget timeseries" data-widget="timeseries" data-src="data/ts_free.json" data-video="fig-video-free_100x-video" data-video-speed="1">
+<div class="widget-body">
+<p class="missing">No static figure for this viewer; the interactive view needs JavaScript.</p>
+</div>
+</div>
+<figcaption>Free joint-space motion: representative case free-test-002 (median composite of the shared PD) at 1x; the gray sphere is the commanded tool position, metrics accumulate causally; the plot cursor follows the video. <a class="source" href="media/free_100x.mp4">Video (MP4)</a> <a class="source" href="data/ts_free.json">Data (JSON)</a></figcaption>
+</figure>
+<figure class="video wide" id="fig-video-policy_100x">
+<video id="fig-video-policy_100x-video" controls preload="metadata" poster="media/policy_100x-middle.png">
+<source src="media/policy_100x.mp4" type="video/mp4">
+<p class="missing">Video playback is not supported here; <a href="media/policy_100x.mp4">download the video (MP4)</a>.</p>
+</video>
+<div class="widget timeseries" data-widget="timeseries" data-src="data/ts_policy.json" data-video="fig-video-policy_100x-video" data-video-speed="1">
+<div class="widget-body">
+<p class="missing">No static figure for this viewer; the interactive view needs JavaScript.</p>
+</div>
+</div>
+<figcaption>Policy-like targets: representative case policy-test-010 (median composite of the shared PD) at 1x; the gray sphere is the commanded tool position, metrics accumulate causally; the plot cursor follows the video. <a class="source" href="media/policy_100x.mp4">Video (MP4)</a> <a class="source" href="data/ts_policy.json">Data (JSON)</a></figcaption>
+</figure>
+<figure class="video wide" id="fig-video-step_100x">
+<video id="fig-video-step_100x-video" controls preload="metadata" poster="media/step_100x-middle.png">
+<source src="media/step_100x.mp4" type="video/mp4">
+<p class="missing">Video playback is not supported here; <a href="media/step_100x.mp4">download the video (MP4)</a>.</p>
+</video>
+<div class="widget timeseries" data-widget="timeseries" data-src="data/ts_step.json" data-video="fig-video-step_100x-video" data-video-speed="1">
+<div class="widget-body">
+<p class="missing">No static figure for this viewer; the interactive view needs JavaScript.</p>
+</div>
+</div>
+<figcaption>Step targets: representative case step-test-011 (median composite of the shared PD) at 1x; the gray sphere is the commanded tool position, metrics accumulate causally; the plot cursor follows the video. <a class="source" href="media/step_100x.mp4">Video (MP4)</a> <a class="source" href="data/ts_step.json">Data (JSON)</a></figcaption>
+</figure>
+<figure class="video wide" id="fig-video-contact2_100x">
+<video id="fig-video-contact2_100x-video" controls preload="metadata" poster="media/contact2_100x-middle.png">
+<source src="media/contact2_100x.mp4" type="video/mp4">
+<p class="missing">Video playback is not supported here; <a href="media/contact2_100x.mp4">download the video (MP4)</a>.</p>
+</video>
+<div class="widget timeseries" data-widget="timeseries" data-src="data/ts_contact2.json" data-video="fig-video-contact2_100x-video" data-video-speed="1">
+<div class="widget-body">
+<p class="missing">No static figure for this viewer; the interactive view needs JavaScript.</p>
+</div>
+</div>
+<figcaption>Contact: representative case contact2-test-002 (median composite of the shared PD) at 1x; the gray sphere is the commanded tool position, metrics accumulate causally; the plot cursor follows the video. <a class="source" href="media/contact2_100x.mp4">Video (MP4)</a> <a class="source" href="data/ts_contact2.json">Data (JSON)</a></figcaption>
+</figure>
+<figure class="video wide" id="fig-video-contact2_025x">
+<video id="fig-video-contact2_025x-video" controls preload="metadata" poster="media/contact2_025x-middle.png">
+<source src="media/contact2_025x.mp4" type="video/mp4">
+<p class="missing">Video playback is not supported here; <a href="media/contact2_025x.mp4">download the video (MP4)</a>.</p>
+</video>
+<div class="widget timeseries" data-widget="timeseries" data-src="data/ts_contact2.json" data-video="fig-video-contact2_025x-video" data-video-speed="0.25">
+<div class="widget-body">
+<p class="missing">No static figure for this viewer; the interactive view needs JavaScript.</p>
+</div>
+</div>
+<figcaption>Contact: representative case contact2-test-002 (median composite of the shared PD) at 0.25x; the gray sphere is the commanded tool position, metrics accumulate causally; the plot cursor follows the video. <a class="source" href="media/contact2_025x.mp4">Video (MP4)</a> <a class="source" href="data/ts_contact2.json">Data (JSON)</a></figcaption>
+</figure>
+<figure class="video wide" id="fig-video-blocked_100x">
+<video id="fig-video-blocked_100x-video" controls preload="metadata" poster="media/blocked_100x-middle.png">
+<source src="media/blocked_100x.mp4" type="video/mp4">
+<p class="missing">Video playback is not supported here; <a href="media/blocked_100x.mp4">download the video (MP4)</a>.</p>
+</video>
+<div class="widget timeseries" data-widget="timeseries" data-src="data/ts_blocked.json" data-video="fig-video-blocked_100x-video" data-video-speed="1">
+<div class="widget-body">
+<p class="missing">No static figure for this viewer; the interactive view needs JavaScript.</p>
+</div>
+</div>
+<figcaption>Blocked reference: representative case blocked-test-013 (median composite of the shared PD) at 1x; the gray sphere is the commanded tool position, metrics accumulate causally; the plot cursor follows the video. <a class="source" href="media/blocked_100x.mp4">Video (MP4)</a> <a class="source" href="data/ts_blocked.json">Data (JSON)</a></figcaption>
+</figure>
+<figure class="video wide" id="fig-video-blocked_025x">
+<video id="fig-video-blocked_025x-video" controls preload="metadata" poster="media/blocked_025x-middle.png">
+<source src="media/blocked_025x.mp4" type="video/mp4">
+<p class="missing">Video playback is not supported here; <a href="media/blocked_025x.mp4">download the video (MP4)</a>.</p>
+</video>
+<div class="widget timeseries" data-widget="timeseries" data-src="data/ts_blocked.json" data-video="fig-video-blocked_025x-video" data-video-speed="0.25">
+<div class="widget-body">
+<p class="missing">No static figure for this viewer; the interactive view needs JavaScript.</p>
+</div>
+</div>
+<figcaption>Blocked reference: representative case blocked-test-013 (median composite of the shared PD) at 0.25x; the gray sphere is the commanded tool position, metrics accumulate causally; the plot cursor follows the video. <a class="source" href="media/blocked_025x.mp4">Video (MP4)</a> <a class="source" href="data/ts_blocked.json">Data (JSON)</a></figcaption>
+</figure>
+<figure class="video wide" id="fig-video-task_100x">
+<video id="fig-video-task_100x-video" controls preload="metadata" poster="media/task_100x-middle.png">
+<source src="media/task_100x.mp4" type="video/mp4">
+<p class="missing">Video playback is not supported here; <a href="media/task_100x.mp4">download the video (MP4)</a>.</p>
+</video>
+<div class="widget timeseries" data-widget="timeseries" data-src="data/ts_task.json" data-video="fig-video-task_100x-video" data-video-speed="1">
+<div class="widget-body">
+<p class="missing">No static figure for this viewer; the interactive view needs JavaScript.</p>
+</div>
+</div>
+<figcaption>Task sequence: representative case task-test-013 (median composite of the shared PD) at 1x; the gray sphere is the commanded tool position, metrics accumulate causally; the plot cursor follows the video. <a class="source" href="media/task_100x.mp4">Video (MP4)</a> <a class="source" href="data/ts_task.json">Data (JSON)</a></figcaption>
+</figure>
+<figure class="video wide" id="fig-video-task_025x">
+<video id="fig-video-task_025x-video" controls preload="metadata" poster="media/task_025x-middle.png">
+<source src="media/task_025x.mp4" type="video/mp4">
+<p class="missing">Video playback is not supported here; <a href="media/task_025x.mp4">download the video (MP4)</a>.</p>
+</video>
+<div class="widget timeseries" data-widget="timeseries" data-src="data/ts_task.json" data-video="fig-video-task_025x-video" data-video-speed="0.25">
+<div class="widget-body">
+<p class="missing">No static figure for this viewer; the interactive view needs JavaScript.</p>
+</div>
+</div>
+<figcaption>Task sequence: representative case task-test-013 (median composite of the shared PD) at 0.25x; the gray sphere is the commanded tool position, metrics accumulate causally; the plot cursor follows the video. <a class="source" href="media/task_025x.mp4">Video (MP4)</a> <a class="source" href="data/ts_task.json">Data (JSON)</a></figcaption>
+</figure>
+
+<h2>Summary over groups</h2>
+<p>Seed 0 of each arm, evaluated with the corrected harness (each case on its own instance, payload and noise). The three arms of the first reward are reported from their last checkpoints (iterations 349, 299 and 349); the rate-light arms from the checkpoint with the best corrected validation. The reference PD is the protocol v2 shared gain set of report D1 (tuned on the nominal robot); the v1 set is the accurate but non-compliant end of the first pass. Arms still training (learned-model neural torque, imagined rollouts, two more seeds of the 20 mrad arm, and the 20 mrad arm with target history) are added when they finish.</p><table>
+<caption>Means over all cases of a group (every regime of the group pooled). The composites are tuning and selection objectives, not research signals; the cap columns follow ADR 0007.</caption>
+<thead>
+<tr><th>Group</th><th>Controller</th><th class="num">Composite v2</th><th class="num">Composite (15 N cap)</th><th class="num">Excess force above 30 N (N)</th><th class="num">Excess force above 15 N (N)</th><th class="num">Peak force (N)</th><th class="num">Sustained peak, 20 ms (N)</th><th class="num">Position RMSE (rad)</th><th class="num">Diverged</th></tr>
+</thead>
+<tbody>
+<tr><td>In-distribution families</td><td>PD, shared gains (v2)</td><td class="num">4.29</td><td class="num">5.95</td><td class="num">6.53</td><td class="num">10.4</td><td class="num">142</td><td class="num">81.3</td><td class="num">0.0314</td><td class="num">0</td></tr>
+<tr><td>In-distribution families</td><td>PD, shared gains (v1)</td><td class="num">5.8</td><td class="num">11</td><td class="num">32.4</td><td class="num">38.2</td><td class="num">182</td><td class="num">155</td><td class="num">0.019</td><td class="num">0</td></tr>
+<tr><td>In-distribution families</td><td>Neural torque, actor-critic, learned-model gradients</td><td class="num">4.8</td><td class="num">6.57</td><td class="num">7.75</td><td class="num">11.2</td><td class="num">70.1</td><td class="num">53.6</td><td class="num">0.0513</td><td class="num">0</td></tr>
+<tr><td>In-distribution families</td><td>PD + residual, actor-critic, learned-model gradients</td><td class="num">4.17</td><td class="num">4.98</td><td class="num">2.61</td><td class="num">5.19</td><td class="num">70.2</td><td class="num">37.7</td><td class="num">0.0391</td><td class="num">0</td></tr>
+<tr><td>In-distribution families</td><td>PD + residual, actor-critic, per-sample median clipping</td><td class="num">3.59</td><td class="num">4.56</td><td class="num">2.87</td><td class="num">5.6</td><td class="num">89.4</td><td class="num">50</td><td class="num">0.0332</td><td class="num">0</td></tr>
+<tr><td>In-distribution families</td><td>PD + residual, actor-critic, median clipping, rate weight 0.003</td><td class="num">3.28</td><td class="num">4.53</td><td class="num">4.98</td><td class="num">7.66</td><td class="num">75.3</td><td class="num">45</td><td class="num">0.0249</td><td class="num">0</td></tr>
+<tr><td>In-distribution families</td><td>PD + residual, actor-critic, median clipping, rate weight 0.003, target history</td><td class="num">3.35</td><td class="num">4.75</td><td class="num">6.08</td><td class="num">8.88</td><td class="num">77.2</td><td class="num">48</td><td class="num">0.024</td><td class="num">0</td></tr>
+<tr><td>In-distribution families</td><td>PD + residual, actor-critic, median clipping, rate weight 0.003, 20 mrad kernel</td><td class="num">3.33</td><td class="num">4.96</td><td class="num">7.05</td><td class="num">10.4</td><td class="num">89.7</td><td class="num">56.9</td><td class="num">0.0231</td><td class="num">0</td></tr>
+<tr><td>Held-out workspace (base yaw 1.2 to 2.6 rad)</td><td>PD, shared gains (v2)</td><td class="num">1.62</td><td class="num">1.62</td><td class="num">0</td><td class="num">0</td><td class="num">—</td><td class="num">—</td><td class="num">0.0417</td><td class="num">0</td></tr>
+<tr><td>Held-out workspace (base yaw 1.2 to 2.6 rad)</td><td>PD, shared gains (v1)</td><td class="num">1.61</td><td class="num">1.61</td><td class="num">0</td><td class="num">0</td><td class="num">—</td><td class="num">—</td><td class="num">0.0203</td><td class="num">0</td></tr>
+<tr><td>Held-out workspace (base yaw 1.2 to 2.6 rad)</td><td>Neural torque, actor-critic, learned-model gradients</td><td class="num">2.37</td><td class="num">2.37</td><td class="num">0</td><td class="num">0</td><td class="num">—</td><td class="num">—</td><td class="num">0.0733</td><td class="num">0</td></tr>
+<tr><td>Held-out workspace (base yaw 1.2 to 2.6 rad)</td><td>PD + residual, actor-critic, learned-model gradients</td><td class="num">2.04</td><td class="num">2.04</td><td class="num">0</td><td class="num">0</td><td class="num">—</td><td class="num">—</td><td class="num">0.0592</td><td class="num">0</td></tr>
+<tr><td>Held-out workspace (base yaw 1.2 to 2.6 rad)</td><td>PD + residual, actor-critic, per-sample median clipping</td><td class="num">1.87</td><td class="num">1.87</td><td class="num">0</td><td class="num">0</td><td class="num">—</td><td class="num">—</td><td class="num">0.0559</td><td class="num">0</td></tr>
+<tr><td>Held-out workspace (base yaw 1.2 to 2.6 rad)</td><td>PD + residual, actor-critic, median clipping, rate weight 0.003</td><td class="num">1.29</td><td class="num">1.29</td><td class="num">0</td><td class="num">0</td><td class="num">—</td><td class="num">—</td><td class="num">0.0361</td><td class="num">0</td></tr>
+<tr><td>Held-out workspace (base yaw 1.2 to 2.6 rad)</td><td>PD + residual, actor-critic, median clipping, rate weight 0.003, target history</td><td class="num">1.09</td><td class="num">1.09</td><td class="num">0</td><td class="num">0</td><td class="num">—</td><td class="num">—</td><td class="num">0.0333</td><td class="num">0</td></tr>
+<tr><td>Held-out workspace (base yaw 1.2 to 2.6 rad)</td><td>PD + residual, actor-critic, median clipping, rate weight 0.003, 20 mrad kernel</td><td class="num">1.23</td><td class="num">1.23</td><td class="num">0</td><td class="num">0</td><td class="num">—</td><td class="num">—</td><td class="num">0.0332</td><td class="num">0</td></tr>
+<tr><td>Speed x1.5</td><td>PD, shared gains (v2)</td><td class="num">4.33</td><td class="num">5.41</td><td class="num">3.4</td><td class="num">6.91</td><td class="num">296</td><td class="num">132</td><td class="num">0.0356</td><td class="num">0</td></tr>
+<tr><td>Speed x1.5</td><td>PD, shared gains (v1)</td><td class="num">4.07</td><td class="num">6.69</td><td class="num">12.2</td><td class="num">18.6</td><td class="num">265</td><td class="num">143</td><td class="num">0.0171</td><td class="num">0</td></tr>
+<tr><td>Speed x1.5</td><td>Neural torque, actor-critic, learned-model gradients</td><td class="num">3.75</td><td class="num">4.59</td><td class="num">1.12</td><td class="num">4.03</td><td class="num">64.6</td><td class="num">33.5</td><td class="num">0.072</td><td class="num">0</td></tr>
+<tr><td>Speed x1.5</td><td>PD + residual, actor-critic, learned-model gradients</td><td class="num">3.52</td><td class="num">4.51</td><td class="num">2.14</td><td class="num">5.67</td><td class="num">99.1</td><td class="num">48.3</td><td class="num">0.0455</td><td class="num">0</td></tr>
+<tr><td>Speed x1.5</td><td>PD + residual, actor-critic, per-sample median clipping</td><td class="num">3.33</td><td class="num">3.9</td><td class="num">1.02</td><td class="num">2.43</td><td class="num">136</td><td class="num">65.2</td><td class="num">0.0419</td><td class="num">0</td></tr>
+<tr><td>Speed x1.5</td><td>PD + residual, actor-critic, median clipping, rate weight 0.003</td><td class="num">2.71</td><td class="num">3.21</td><td class="num">0.653</td><td class="num">1.91</td><td class="num">75</td><td class="num">35.6</td><td class="num">0.0304</td><td class="num">0</td></tr>
+<tr><td>Speed x1.5</td><td>PD + residual, actor-critic, median clipping, rate weight 0.003, target history</td><td class="num">2.45</td><td class="num">2.98</td><td class="num">0.874</td><td class="num">2.12</td><td class="num">81.1</td><td class="num">39.5</td><td class="num">0.0274</td><td class="num">0</td></tr>
+<tr><td>Speed x1.5</td><td>PD + residual, actor-critic, median clipping, rate weight 0.003, 20 mrad kernel</td><td class="num">2.48</td><td class="num">3.27</td><td class="num">0.939</td><td class="num">3.12</td><td class="num">108</td><td class="num">53.4</td><td class="num">0.0273</td><td class="num">0</td></tr>
+<tr><td>Speed x2</td><td>PD, shared gains (v2)</td><td class="num">4.77</td><td class="num">5.81</td><td class="num">4.19</td><td class="num">7.54</td><td class="num">358</td><td class="num">150</td><td class="num">0.0416</td><td class="num">0</td></tr>
+<tr><td>Speed x2</td><td>PD, shared gains (v1)</td><td class="num">4.32</td><td class="num">6.62</td><td class="num">10.6</td><td class="num">16.5</td><td class="num">323</td><td class="num">159</td><td class="num">0.0208</td><td class="num">0</td></tr>
+<tr><td>Speed x2</td><td>Neural torque, actor-critic, learned-model gradients</td><td class="num">4.3</td><td class="num">5.2</td><td class="num">1.65</td><td class="num">4.42</td><td class="num">81.8</td><td class="num">38.1</td><td class="num">0.083</td><td class="num">0</td></tr>
+<tr><td>Speed x2</td><td>PD + residual, actor-critic, learned-model gradients</td><td class="num">4.88</td><td class="num">6.44</td><td class="num">9.5</td><td class="num">12.7</td><td class="num">118</td><td class="num">52.5</td><td class="num">0.0518</td><td class="num">0</td></tr>
+<tr><td>Speed x2</td><td>PD + residual, actor-critic, per-sample median clipping</td><td class="num">3.94</td><td class="num">4.74</td><td class="num">2.36</td><td class="num">4.6</td><td class="num">162</td><td class="num">74.6</td><td class="num">0.0481</td><td class="num">0</td></tr>
+<tr><td>Speed x2</td><td>PD + residual, actor-critic, median clipping, rate weight 0.003</td><td class="num">3.14</td><td class="num">3.59</td><td class="num">0.891</td><td class="num">2.06</td><td class="num">85.6</td><td class="num">38.8</td><td class="num">0.0372</td><td class="num">0</td></tr>
+<tr><td>Speed x2</td><td>PD + residual, actor-critic, median clipping, rate weight 0.003, target history</td><td class="num">2.84</td><td class="num">3.26</td><td class="num">0.829</td><td class="num">1.85</td><td class="num">84.3</td><td class="num">38.3</td><td class="num">0.035</td><td class="num">0</td></tr>
+<tr><td>Speed x2</td><td>PD + residual, actor-critic, median clipping, rate weight 0.003, 20 mrad kernel</td><td class="num">2.88</td><td class="num">3.56</td><td class="num">1.19</td><td class="num">3.18</td><td class="num">105</td><td class="num">50.8</td><td class="num">0.0338</td><td class="num">0</td></tr>
+<tr><td>Payload 3 kg</td><td>PD, shared gains (v2)</td><td class="num">9.9</td><td class="num">13.6</td><td class="num">19</td><td class="num">27.3</td><td class="num">235</td><td class="num">120</td><td class="num">0.0565</td><td class="num">0</td></tr>
+<tr><td>Payload 3 kg</td><td>PD, shared gains (v1)</td><td class="num">10</td><td class="num">20.1</td><td class="num">62.5</td><td class="num">73.5</td><td class="num">214</td><td class="num">173</td><td class="num">0.0168</td><td class="num">0</td></tr>
+<tr><td>Payload 3 kg</td><td>Neural torque, actor-critic, learned-model gradients</td><td class="num">6.15</td><td class="num">8.52</td><td class="num">7.5</td><td class="num">14.8</td><td class="num">88</td><td class="num">50</td><td class="num">0.0598</td><td class="num">0</td></tr>
+<tr><td>Payload 3 kg</td><td>PD + residual, actor-critic, learned-model gradients</td><td class="num">5.13</td><td class="num">7.27</td><td class="num">5.94</td><td class="num">12.2</td><td class="num">113</td><td class="num">62.4</td><td class="num">0.0362</td><td class="num">0</td></tr>
+<tr><td>Payload 3 kg</td><td>PD + residual, actor-critic, per-sample median clipping</td><td class="num">5.41</td><td class="num">7.56</td><td class="num">5.24</td><td class="num">13.2</td><td class="num">142</td><td class="num">70.4</td><td class="num">0.0313</td><td class="num">0</td></tr>
+<tr><td>Payload 3 kg</td><td>PD + residual, actor-critic, median clipping, rate weight 0.003</td><td class="num">4.45</td><td class="num">6.88</td><td class="num">8.11</td><td class="num">15.3</td><td class="num">118</td><td class="num">62.8</td><td class="num">0.0223</td><td class="num">0</td></tr>
+<tr><td>Payload 3 kg</td><td>PD + residual, actor-critic, median clipping, rate weight 0.003, target history</td><td class="num">4.34</td><td class="num">6.78</td><td class="num">8.39</td><td class="num">14.9</td><td class="num">111</td><td class="num">61.5</td><td class="num">0.0234</td><td class="num">0</td></tr>
+<tr><td>Payload 3 kg</td><td>PD + residual, actor-critic, median clipping, rate weight 0.003, 20 mrad kernel</td><td class="num">4.57</td><td class="num">7.58</td><td class="num">10.5</td><td class="num">19.3</td><td class="num">118</td><td class="num">66.2</td><td class="num">0.0208</td><td class="num">0</td></tr>
+<tr><td>Held-out robot instances (doubled deviations)</td><td>PD, shared gains (v2)</td><td class="num">4.48</td><td class="num">6.34</td><td class="num">6.78</td><td class="num">11.7</td><td class="num">165</td><td class="num">93.1</td><td class="num">0.0348</td><td class="num">0</td></tr>
+<tr><td>Held-out robot instances (doubled deviations)</td><td>PD, shared gains (v1)</td><td class="num">8.43</td><td class="num">16.2</td><td class="num">50.7</td><td class="num">57.7</td><td class="num">246</td><td class="num">197</td><td class="num">0.0212</td><td class="num">0</td></tr>
+<tr><td>Held-out robot instances (doubled deviations)</td><td>Neural torque, actor-critic, learned-model gradients</td><td class="num">5.96</td><td class="num">8.94</td><td class="num">13.8</td><td class="num">19.2</td><td class="num">90.8</td><td class="num">74</td><td class="num">0.0662</td><td class="num">0</td></tr>
+<tr><td>Held-out robot instances (doubled deviations)</td><td>PD + residual, actor-critic, learned-model gradients</td><td class="num">4.63</td><td class="num">5.97</td><td class="num">4.39</td><td class="num">8.31</td><td class="num">91.5</td><td class="num">53.2</td><td class="num">0.0453</td><td class="num">0</td></tr>
+<tr><td>Held-out robot instances (doubled deviations)</td><td>PD + residual, actor-critic, per-sample median clipping</td><td class="num">4</td><td class="num">5.3</td><td class="num">3.36</td><td class="num">7.59</td><td class="num">114</td><td class="num">63.7</td><td class="num">0.0403</td><td class="num">0</td></tr>
+<tr><td>Held-out robot instances (doubled deviations)</td><td>PD + residual, actor-critic, median clipping, rate weight 0.003</td><td class="num">3.57</td><td class="num">5.15</td><td class="num">6.1</td><td class="num">10.4</td><td class="num">89.3</td><td class="num">54.5</td><td class="num">0.0292</td><td class="num">0</td></tr>
+<tr><td>Held-out robot instances (doubled deviations)</td><td>PD + residual, actor-critic, median clipping, rate weight 0.003, target history</td><td class="num">3.66</td><td class="num">5.49</td><td class="num">7.21</td><td class="num">12</td><td class="num">96.4</td><td class="num">60.7</td><td class="num">0.0271</td><td class="num">0</td></tr>
+<tr><td>Held-out robot instances (doubled deviations)</td><td>PD + residual, actor-critic, median clipping, rate weight 0.003, 20 mrad kernel</td><td class="num">3.86</td><td class="num">6.05</td><td class="num">8.8</td><td class="num">14.1</td><td class="num">108</td><td class="num">68.6</td><td class="num">0.0268</td><td class="num">0</td></tr>
+</tbody>
+</table>
+
+<h2>In-distribution families</h2>
+<p>Sixteen cases per family on the 8 instances with payloads of 0, 1 or 2 kg.</p><table class="wide">
+<caption>In-distribution families: primary metrics (mean over cases; paired difference against PD with shared gains, starred when the 95% bootstrap interval excludes zero).</caption>
+<thead>
+<tr><th>Regime</th><th>Metric</th><th class="num">PD, shared gains (v2)</th><th class="num">PD, shared gains (v1)</th><th class="num">Neural torque, actor-critic, learned-model gradients</th><th class="num">PD + residual, actor-critic, learned-model gradients</th><th class="num">PD + residual, actor-critic, per-sample median clipping</th><th class="num">PD + residual, actor-critic, median clipping, rate weight 0.003</th><th class="num">PD + residual, actor-critic, median clipping, rate weight 0.003, target history</th><th class="num">PD + residual, actor-critic, median clipping, rate weight 0.003, 20 mrad kernel</th></tr>
+</thead>
+<tbody>
+<tr><td>Hold</td><td>Position RMSE (rad)</td><td class="num">0.0167</td><td class="num">0.00281 (-0.014*)</td><td class="num">0.0178 (0.001)</td><td class="num">0.021 (0.0043)</td><td class="num">0.0118 (-0.0049)</td><td class="num">0.0077 (-0.009*)</td><td class="num">0.00819 (-0.0085*)</td><td class="num">0.00613 (-0.011*)</td></tr>
+<tr><td>Hold</td><td>Peak deflection under 10 N pulse (m)</td><td class="num">0.016</td><td class="num">0.00448 (-0.012*)</td><td class="num">0.0141 (-0.0019)</td><td class="num">0.0166 (0.00058)</td><td class="num">0.0175 (0.0015)</td><td class="num">0.0143 (-0.0017)</td><td class="num">0.0123 (-0.0037*)</td><td class="num">0.0118 (-0.0042*)</td></tr>
+<tr><td>Hold</td><td>Torque rate RMS (Nm/s)</td><td class="num">48.7</td><td class="num">169 (1.2e+02*)</td><td class="num">52.9 (4.2*)</td><td class="num">45.2 (-3.5*)</td><td class="num">41.3 (-7.4*)</td><td class="num">47.1 (-1.7*)</td><td class="num">43.1 (-5.6*)</td><td class="num">43.4 (-5.3*)</td></tr>
+<tr><td>Free joint-space motion</td><td>Position RMSE (rad)</td><td class="num">0.0191</td><td class="num">0.00346 (-0.016*)</td><td class="num">0.0558 (0.037*)</td><td class="num">0.0389 (0.02*)</td><td class="num">0.0345 (0.015*)</td><td class="num">0.02 (0.00094)</td><td class="num">0.0161 (-0.003)</td><td class="num">0.0134 (-0.0057*)</td></tr>
+<tr><td>Free joint-space motion</td><td>Torque rate RMS (Nm/s)</td><td class="num">52.9</td><td class="num">174 (1.2e+02*)</td><td class="num">57.5 (4.6)</td><td class="num">44.1 (-8.8*)</td><td class="num">43.6 (-9.3*)</td><td class="num">47.3 (-5.7*)</td><td class="num">45.4 (-7.5*)</td><td class="num">44.5 (-8.4*)</td></tr>
+<tr><td>Policy-like targets</td><td>Position RMSE (rad)</td><td class="num">0.0553</td><td class="num">0.0333 (-0.022*)</td><td class="num">0.1 (0.045*)</td><td class="num">0.0701 (0.015*)</td><td class="num">0.069 (0.014*)</td><td class="num">0.048 (-0.0073*)</td><td class="num">0.0452 (-0.01*)</td><td class="num">0.047 (-0.0084*)</td></tr>
+<tr><td>Policy-like targets</td><td>Torque rate RMS (Nm/s)</td><td class="num">1.77e+03</td><td class="num">4.89e+03 (3.1e+03*)</td><td class="num">491 (-1.3e+03*)</td><td class="num">977 (-7.9e+02*)</td><td class="num">938 (-8.3e+02*)</td><td class="num">1.29e+03 (-4.7e+02*)</td><td class="num">805 (-9.6e+02*)</td><td class="num">1.57e+03 (-2e+02*)</td></tr>
+<tr><td>Step targets</td><td>Position RMSE (rad)</td><td class="num">0.0444</td><td class="num">0.0325 (-0.012*)</td><td class="num">0.0554 (0.011*)</td><td class="num">0.048 (0.0036*)</td><td class="num">0.0463 (0.0019)</td><td class="num">0.0391 (-0.0053*)</td><td class="num">0.0388 (-0.0056*)</td><td class="num">0.0382 (-0.0062*)</td></tr>
+<tr><td>Step targets</td><td>Settling time after step (s)</td><td class="num">0.663</td><td class="num">0.192 (-0.47*)</td><td class="num">0.738 (0.075*)</td><td class="num">0.719 (0.056)</td><td class="num">0.681 (0.018)</td><td class="num">0.456 (-0.21*)</td><td class="num">0.528 (-0.14)</td><td class="num">0.391 (-0.27*)</td></tr>
+<tr><td>Step targets</td><td>Step overshoot (-)</td><td class="num">0.0176</td><td class="num">0.0534 (0.036*)</td><td class="num">0.011 (-0.0066)</td><td class="num">0.0149 (-0.0027)</td><td class="num">0.00843 (-0.0092*)</td><td class="num">0.0235 (0.0058)</td><td class="num">0.0366 (0.019*)</td><td class="num">0.0139 (-0.0037)</td></tr>
+<tr><td>Contact (tilt, depth, slide)</td><td>Excess contact force above 30 N (mean while in contact) (N)</td><td class="num">8.95</td><td class="num">51.6 (43*)</td><td class="num">4.35 (-4.6*)</td><td class="num">4.4 (-4.6*)</td><td class="num">3.47 (-5.5*)</td><td class="num">3.04 (-5.9*)</td><td class="num">2.8 (-6.2*)</td><td class="num">5.62 (-3.3*)</td></tr>
+<tr><td>Contact (tilt, depth, slide)</td><td>Excess contact force above the 15 N cap (mean while in contact) (N)</td><td class="num">16.1</td><td class="num">64.8 (49*)</td><td class="num">10.6 (-5.5*)</td><td class="num">9.76 (-6.4*)</td><td class="num">8.46 (-7.7*)</td><td class="num">7.24 (-8.9*)</td><td class="num">7.49 (-8.6*)</td><td class="num">12.5 (-3.6)</td></tr>
+<tr><td>Contact (tilt, depth, slide)</td><td>Peak normal force (N)</td><td class="num">169</td><td class="num">234 (64*)</td><td class="num">53 (-1.2e+02*)</td><td class="num">100 (-69*)</td><td class="num">111 (-58*)</td><td class="num">78 (-91*)</td><td class="num">82.7 (-87*)</td><td class="num">106 (-63*)</td></tr>
+<tr><td>Contact (tilt, depth, slide)</td><td>Peak of the 20 ms low-pass filtered normal force (sustained force) (N)</td><td class="num">88.8</td><td class="num">165 (76*)</td><td class="num">33.6 (-55*)</td><td class="num">47.2 (-42*)</td><td class="num">58.8 (-30*)</td><td class="num">40.8 (-48*)</td><td class="num">43.3 (-45*)</td><td class="num">60.4 (-28*)</td></tr>
+<tr><td>Contact (tilt, depth, slide)</td><td>Feasible-direction tool error (m)</td><td class="num">0.0403</td><td class="num">0.0227 (-0.018*)</td><td class="num">0.0326 (-0.0077)</td><td class="num">0.0367 (-0.0036)</td><td class="num">0.0285 (-0.012)</td><td class="num">0.0241 (-0.016*)</td><td class="num">0.0217 (-0.019*)</td><td class="num">0.0222 (-0.018*)</td></tr>
+<tr><td>Contact (tilt, depth, slide)</td><td>Press-phase force deficit below 5 N (N)</td><td class="num">1.39</td><td class="num">0 (-1.4*)</td><td class="num">1.12 (-0.27)</td><td class="num">0.869 (-0.52)</td><td class="num">0.312 (-1.1*)</td><td class="num">1.05 (-0.34)</td><td class="num">1.14 (-0.25)</td><td class="num">0.333 (-1.1*)</td></tr>
+<tr><td>Contact (tilt, depth, slide)</td><td>Contact losses of 5 ms or more during contact phase (-)</td><td class="num">9.5</td><td class="num">0.125 (-9.4*)</td><td class="num">3.31 (-6.2)</td><td class="num">9.38 (-0.12)</td><td class="num">21.8 (12)</td><td class="num">43 (34*)</td><td class="num">40 (30*)</td><td class="num">18.4 (8.9)</td></tr>
+<tr><td>Contact (tilt, depth, slide)</td><td>Contact losses of 5 ms or more per second of press phase (1/s)</td><td class="num">4.33</td><td class="num">0.0715 (-4.3*)</td><td class="num">1.75 (-2.6)</td><td class="num">4.06 (-0.27)</td><td class="num">9.5 (5.2)</td><td class="num">16.3 (12*)</td><td class="num">15.2 (11*)</td><td class="num">8.58 (4.2)</td></tr>
+<tr><td>Blocked reference</td><td>Excess contact force above 30 N (mean while in contact) (N)</td><td class="num">32.7</td><td class="num">161 (1.3e+02*)</td><td class="num">49.7 (17)</td><td class="num">11.7 (-21*)</td><td class="num">16.4 (-16*)</td><td class="num">31.7 (-1)</td><td class="num">39.7 (7*)</td><td class="num">43 (10*)</td></tr>
+<tr><td>Blocked reference</td><td>Excess contact force above the 15 N cap (mean while in contact) (N)</td><td class="num">45.6</td><td class="num">176 (1.3e+02*)</td><td class="num">64.1 (19)</td><td class="num">21.4 (-24*)</td><td class="num">28.4 (-17*)</td><td class="num">45.4 (-0.16)</td><td class="num">53.9 (8.3*)</td><td class="num">57.2 (12*)</td></tr>
+<tr><td>Blocked reference</td><td>Peak normal force (N)</td><td class="num">134</td><td class="num">252 (1.2e+02*)</td><td class="num">122 (-12)</td><td class="num">94.9 (-39*)</td><td class="num">117 (-17)</td><td class="num">118 (-16)</td><td class="num">120 (-14)</td><td class="num">127 (-7.3)</td></tr>
+<tr><td>Blocked reference</td><td>Peak of the 20 ms low-pass filtered normal force (sustained force) (N)</td><td class="num">90.4</td><td class="num">243 (1.5e+02*)</td><td class="num">104 (14)</td><td class="num">58.1 (-32*)</td><td class="num">71.3 (-19*)</td><td class="num">81.7 (-8.7)</td><td class="num">88 (-2.4)</td><td class="num">92.8 (2.4)</td></tr>
+<tr><td>Blocked reference</td><td>Feasible-direction tool error (m)</td><td class="num">0.0376</td><td class="num">0.0178 (-0.02*)</td><td class="num">0.0386 (0.00099)</td><td class="num">0.0471 (0.0094)</td><td class="num">0.0331 (-0.0046)</td><td class="num">0.0281 (-0.0096)</td><td class="num">0.0241 (-0.013*)</td><td class="num">0.0228 (-0.015*)</td></tr>
+<tr><td>Blocked reference</td><td>Recovery after a blocked reference returns (s)</td><td class="num">0.367</td><td class="num">0.0676 (-0.3*)</td><td class="num">1.44 (1.1*)</td><td class="num">0.91 (0.54*)</td><td class="num">0.47 (0.1)</td><td class="num">0.349 (-0.018)</td><td class="num">0.576 (0.21)</td><td class="num">0.668 (0.3)</td></tr>
+<tr><td>Blocked reference</td><td>Apparent stiffness: mean normal force per metre of reference depth while blocked (after the first 0.3 s of contact) (N/m)</td><td class="num">1.18e+03</td><td class="num">4.2e+03 (3e+03*)</td><td class="num">1.62e+03 (4.4e+02*)</td><td class="num">746 (-4.3e+02)</td><td class="num">793 (-3.9e+02*)</td><td class="num">1.19e+03 (8.5)</td><td class="num">1.39e+03 (2.1e+02*)</td><td class="num">1.44e+03 (2.6e+02*)</td></tr>
+<tr><td>Task sequence</td><td>Excess contact force above 30 N (mean while in contact) (N)</td><td class="num">3.86</td><td class="num">10 (6.2*)</td><td class="num">0.144 (-3.7*)</td><td class="num">0.329 (-3.5*)</td><td class="num">0.171 (-3.7*)</td><td class="num">0.0878 (-3.8*)</td><td class="num">0.068 (-3.8*)</td><td class="num">0.171 (-3.7*)</td></tr>
+<tr><td>Task sequence</td><td>Excess contact force above the 15 N cap (mean while in contact) (N)</td><td class="num">10.7</td><td class="num">21.8 (11*)</td><td class="num">3.59 (-7.1*)</td><td class="num">2.76 (-7.9*)</td><td class="num">2.34 (-8.4*)</td><td class="num">0.952 (-9.8*)</td><td class="num">0.818 (-9.9*)</td><td class="num">2.15 (-8.6*)</td></tr>
+<tr><td>Task sequence</td><td>Peak normal force (N)</td><td class="num">123</td><td class="num">61.4 (-61*)</td><td class="num">34.9 (-88*)</td><td class="num">15.6 (-1.1e+02*)</td><td class="num">39.8 (-83*)</td><td class="num">29.7 (-93*)</td><td class="num">28.7 (-94*)</td><td class="num">36.5 (-86*)</td></tr>
+<tr><td>Task sequence</td><td>Peak of the 20 ms low-pass filtered normal force (sustained force) (N)</td><td class="num">64.7</td><td class="num">56.1 (-8.6)</td><td class="num">23.2 (-41*)</td><td class="num">7.82 (-57*)</td><td class="num">20 (-45*)</td><td class="num">12.7 (-52*)</td><td class="num">12.7 (-52*)</td><td class="num">17.5 (-47*)</td></tr>
+<tr><td>Task sequence</td><td>Feasible-direction tool error (m)</td><td class="num">0.0241</td><td class="num">0.00604 (-0.018*)</td><td class="num">0.0244 (0.0003)</td><td class="num">0.0302 (0.006)</td><td class="num">0.0233 (-0.00083)</td><td class="num">0.0179 (-0.0062)</td><td class="num">0.0156 (-0.0085)</td><td class="num">0.014 (-0.01*)</td></tr>
+<tr><td>Task sequence</td><td>Press-phase force deficit below 5 N (N)</td><td class="num">0.244</td><td class="num">0 (-0.24*)</td><td class="num">0.126 (-0.12*)</td><td class="num">3.73 (3.5*)</td><td class="num">1.45 (1.2*)</td><td class="num">2.47 (2.2*)</td><td class="num">2.46 (2.2*)</td><td class="num">1.45 (1.2*)</td></tr>
+<tr><td>Task sequence</td><td>Contact losses of 5 ms or more per second of press phase (1/s)</td><td class="num">11.7</td><td class="num">0 (-12*)</td><td class="num">4.15 (-7.5*)</td><td class="num">3.77 (-7.9)</td><td class="num">8.5 (-3.2)</td><td class="num">16.7 (5)</td><td class="num">15.7 (4.1)</td><td class="num">13.3 (1.6)</td></tr>
+</tbody>
+</table><figure class="widget compare" id="fig-compare-in_distribution" data-widget="compare" data-src="data/compare_in_distribution.json" data-regime="hold" data-metric="pos_rmse">
+<div class="widget-body">
+<p class="selection">Selection: Hold, Position RMSE (rad); n = 16 cases. Mean with 95% bootstrap CI (1000 resamples); difference vs PD, shared gains (v2) is paired by case, failed cases dropped from the pair.</p>
+<table class="compare-table">
+<thead>
+<tr><th>Method</th><th class="num">Mean</th><th class="num">95% CI</th><th class="num">n</th><th class="num">Δ vs reference</th><th class="num">95% CI (paired)</th><th class="num">Pairs</th></tr>
+</thead>
+<tbody>
+<tr><td>PD, shared gains (v2)</td><td class="num">0.01671</td><td class="num">[0.01252, 0.02065]</td><td class="num">16</td><td class="num">reference</td><td class="num">—</td><td class="num">—</td></tr>
+<tr><td>PD, shared gains (v1)</td><td class="num">0.002815</td><td class="num">[0.002149, 0.003561]</td><td class="num">16</td><td class="num">-0.01389</td><td class="num">[-0.01728, -0.01063]</td><td class="num">16</td></tr>
+<tr><td>Neural torque, actor-critic, learned-model gradients</td><td class="num">0.01776</td><td class="num">[0.01607, 0.01931]</td><td class="num">16</td><td class="num">0.001047</td><td class="num">[-0.002991, 0.004773]</td><td class="num">16</td></tr>
+<tr><td>PD + residual, actor-critic, learned-model gradients</td><td class="num">0.02096</td><td class="num">[0.01883, 0.02317]</td><td class="num">16</td><td class="num">0.00425</td><td class="num">[-0.0009732, 0.008838]</td><td class="num">16</td></tr>
+<tr><td>PD + residual, actor-critic, per-sample median clipping</td><td class="num">0.01181</td><td class="num">[0.01062, 0.01318]</td><td class="num">16</td><td class="num">-0.004897</td><td class="num">[-0.009686, 0.0004918]</td><td class="num">16</td></tr>
+<tr><td>PD + residual, actor-critic, median clipping, rate weight 0.003</td><td class="num">0.007704</td><td class="num">[0.00632, 0.009356]</td><td class="num">16</td><td class="num">-0.009004</td><td class="num">[-0.01393, -0.003567]</td><td class="num">16</td></tr>
+<tr><td>PD + residual, actor-critic, median clipping, rate weight 0.003, target history</td><td class="num">0.008189</td><td class="num">[0.006639, 0.009835]</td><td class="num">16</td><td class="num">-0.00852</td><td class="num">[-0.01293, -0.003534]</td><td class="num">16</td></tr>
+<tr><td>PD + residual, actor-critic, median clipping, rate weight 0.003, 20 mrad kernel</td><td class="num">0.006128</td><td class="num">[0.005285, 0.007051]</td><td class="num">16</td><td class="num">-0.01058</td><td class="num">[-0.01488, -0.005762]</td><td class="num">16</td></tr>
+</tbody>
+</table>
+</div>
+<figcaption>In-distribution families: per-case values; dots are cases, the tick the mean, the bar its 95% bootstrap interval. <a class="source" href="data/compare_in_distribution.json">Data (JSON)</a></figcaption>
+</figure>
+
+<h2>Held-out workspace (base yaw 1.2 to 2.6 rad)</h2>
+<table class="wide">
+<caption>Held-out workspace (base yaw 1.2 to 2.6 rad): primary metrics (mean over cases; paired difference against PD with shared gains, starred when the 95% bootstrap interval excludes zero).</caption>
+<thead>
+<tr><th>Regime</th><th>Metric</th><th class="num">PD, shared gains (v2)</th><th class="num">PD, shared gains (v1)</th><th class="num">Neural torque, actor-critic, learned-model gradients</th><th class="num">PD + residual, actor-critic, learned-model gradients</th><th class="num">PD + residual, actor-critic, per-sample median clipping</th><th class="num">PD + residual, actor-critic, median clipping, rate weight 0.003</th><th class="num">PD + residual, actor-critic, median clipping, rate weight 0.003, target history</th><th class="num">PD + residual, actor-critic, median clipping, rate weight 0.003, 20 mrad kernel</th></tr>
+</thead>
+<tbody>
+<tr><td>Free joint-space motion</td><td>Position RMSE (rad)</td><td class="num">0.0263</td><td class="num">0.00461 (-0.022*)</td><td class="num">0.052 (0.026*)</td><td class="num">0.0417 (0.015*)</td><td class="num">0.0352 (0.0089*)</td><td class="num">0.0183 (-0.0079)</td><td class="num">0.0155 (-0.011*)</td><td class="num">0.0146 (-0.012*)</td></tr>
+<tr><td>Free joint-space motion</td><td>Torque rate RMS (Nm/s)</td><td class="num">54.7</td><td class="num">177 (1.2e+02*)</td><td class="num">50.7 (-4.1)</td><td class="num">45.6 (-9.2*)</td><td class="num">43.9 (-11*)</td><td class="num">48 (-6.7*)</td><td class="num">47.2 (-7.5*)</td><td class="num">46.1 (-8.6*)</td></tr>
+<tr><td>Policy-like targets</td><td>Position RMSE (rad)</td><td class="num">0.0572</td><td class="num">0.0359 (-0.021*)</td><td class="num">0.0947 (0.038*)</td><td class="num">0.0768 (0.02*)</td><td class="num">0.0767 (0.02*)</td><td class="num">0.0539 (-0.0032)</td><td class="num">0.0512 (-0.006*)</td><td class="num">0.0518 (-0.0054*)</td></tr>
+<tr><td>Policy-like targets</td><td>Torque rate RMS (Nm/s)</td><td class="num">1.82e+03</td><td class="num">5.23e+03 (3.4e+03*)</td><td class="num">506 (-1.3e+03*)</td><td class="num">1.03e+03 (-7.9e+02*)</td><td class="num">985 (-8.3e+02*)</td><td class="num">1.34e+03 (-4.8e+02*)</td><td class="num">832 (-9.8e+02*)</td><td class="num">1.62e+03 (-1.9e+02*)</td></tr>
+</tbody>
+</table><figure class="widget compare" id="fig-compare-heldout_workspace" data-widget="compare" data-src="data/compare_heldout_workspace.json" data-regime="free" data-metric="pos_rmse">
+<div class="widget-body">
+<p class="selection">Selection: Free joint-space motion, Position RMSE (rad); n = 8 cases. Mean with 95% bootstrap CI (1000 resamples); difference vs PD, shared gains (v2) is paired by case, failed cases dropped from the pair.</p>
+<table class="compare-table">
+<thead>
+<tr><th>Method</th><th class="num">Mean</th><th class="num">95% CI</th><th class="num">n</th><th class="num">Δ vs reference</th><th class="num">95% CI (paired)</th><th class="num">Pairs</th></tr>
+</thead>
+<tbody>
+<tr><td>PD, shared gains (v2)</td><td class="num">0.02628</td><td class="num">[0.01836, 0.03486]</td><td class="num">8</td><td class="num">reference</td><td class="num">—</td><td class="num">—</td></tr>
+<tr><td>PD, shared gains (v1)</td><td class="num">0.004607</td><td class="num">[0.00306, 0.006442]</td><td class="num">8</td><td class="num">-0.02167</td><td class="num">[-0.02766, -0.0152]</td><td class="num">8</td></tr>
+<tr><td>Neural torque, actor-critic, learned-model gradients</td><td class="num">0.05196</td><td class="num">[0.04451, 0.06002]</td><td class="num">8</td><td class="num">0.02568</td><td class="num">[0.01466, 0.03676]</td><td class="num">8</td></tr>
+<tr><td>PD + residual, actor-critic, learned-model gradients</td><td class="num">0.0417</td><td class="num">[0.03763, 0.04567]</td><td class="num">8</td><td class="num">0.01543</td><td class="num">[0.007389, 0.02438]</td><td class="num">8</td></tr>
+<tr><td>PD + residual, actor-critic, per-sample median clipping</td><td class="num">0.03519</td><td class="num">[0.03128, 0.03881]</td><td class="num">8</td><td class="num">0.00891</td><td class="num">[0.0008281, 0.01865]</td><td class="num">8</td></tr>
+<tr><td>PD + residual, actor-critic, median clipping, rate weight 0.003</td><td class="num">0.01834</td><td class="num">[0.01536, 0.02102]</td><td class="num">8</td><td class="num">-0.007933</td><td class="num">[-0.01629, 0.001531]</td><td class="num">8</td></tr>
+<tr><td>PD + residual, actor-critic, median clipping, rate weight 0.003, target history</td><td class="num">0.01545</td><td class="num">[0.01258, 0.01802]</td><td class="num">8</td><td class="num">-0.01082</td><td class="num">[-0.01787, -0.003518]</td><td class="num">8</td></tr>
+<tr><td>PD + residual, actor-critic, median clipping, rate weight 0.003, 20 mrad kernel</td><td class="num">0.01461</td><td class="num">[0.01131, 0.0174]</td><td class="num">8</td><td class="num">-0.01167</td><td class="num">[-0.01913, -0.004313]</td><td class="num">8</td></tr>
+</tbody>
+</table>
+</div>
+<figcaption>Held-out workspace (base yaw 1.2 to 2.6 rad): per-case values; dots are cases, the tick the mean, the bar its 95% bootstrap interval. <a class="source" href="data/compare_heldout_workspace.json">Data (JSON)</a></figcaption>
+</figure>
+
+<h2>Speed x1.5</h2>
+<table class="wide">
+<caption>Speed x1.5: primary metrics (mean over cases; paired difference against PD with shared gains, starred when the 95% bootstrap interval excludes zero).</caption>
+<thead>
+<tr><th>Regime</th><th>Metric</th><th class="num">PD, shared gains (v2)</th><th class="num">PD, shared gains (v1)</th><th class="num">Neural torque, actor-critic, learned-model gradients</th><th class="num">PD + residual, actor-critic, learned-model gradients</th><th class="num">PD + residual, actor-critic, per-sample median clipping</th><th class="num">PD + residual, actor-critic, median clipping, rate weight 0.003</th><th class="num">PD + residual, actor-critic, median clipping, rate weight 0.003, target history</th><th class="num">PD + residual, actor-critic, median clipping, rate weight 0.003, 20 mrad kernel</th></tr>
+</thead>
+<tbody>
+<tr><td>Free joint-space motion</td><td>Position RMSE (rad)</td><td class="num">0.0248</td><td class="num">0.00638 (-0.018*)</td><td class="num">0.0787 (0.054*)</td><td class="num">0.0412 (0.016*)</td><td class="num">0.0379 (0.013*)</td><td class="num">0.0268 (0.002)</td><td class="num">0.0221 (-0.0027)</td><td class="num">0.0189 (-0.0059*)</td></tr>
+<tr><td>Free joint-space motion</td><td>Torque rate RMS (Nm/s)</td><td class="num">63.4</td><td class="num">177 (1.1e+02*)</td><td class="num">76.7 (13*)</td><td class="num">60.7 (-2.8)</td><td class="num">60.4 (-3.1*)</td><td class="num">64.9 (1.4)</td><td class="num">64.7 (1.2)</td><td class="num">60.3 (-3.1)</td></tr>
+<tr><td>Policy-like targets</td><td>Position RMSE (rad)</td><td class="num">0.0777</td><td class="num">0.0423 (-0.035*)</td><td class="num">0.136 (0.058*)</td><td class="num">0.093 (0.015*)</td><td class="num">0.0929 (0.015*)</td><td class="num">0.0658 (-0.012*)</td><td class="num">0.0618 (-0.016*)</td><td class="num">0.0654 (-0.012*)</td></tr>
+<tr><td>Policy-like targets</td><td>Torque rate RMS (Nm/s)</td><td class="num">1.95e+03</td><td class="num">5.6e+03 (3.6e+03*)</td><td class="num">532 (-1.4e+03*)</td><td class="num">1.15e+03 (-8e+02*)</td><td class="num">1.11e+03 (-8.4e+02*)</td><td class="num">1.44e+03 (-5.1e+02*)</td><td class="num">888 (-1.1e+03*)</td><td class="num">1.72e+03 (-2.3e+02*)</td></tr>
+<tr><td>Contact (tilt, depth, slide)</td><td>Excess contact force above 30 N (mean while in contact) (N)</td><td class="num">8.14</td><td class="num">38 (30*)</td><td class="num">3.51 (-4.6)</td><td class="num">5.07 (-3.1)</td><td class="num">3.42 (-4.7*)</td><td class="num">2.23 (-5.9*)</td><td class="num">3.16 (-5*)</td><td class="num">3.14 (-5*)</td></tr>
+<tr><td>Contact (tilt, depth, slide)</td><td>Excess contact force above the 15 N cap (mean while in contact) (N)</td><td class="num">14.5</td><td class="num">51.1 (37*)</td><td class="num">9.79 (-4.7)</td><td class="num">11.5 (-3)</td><td class="num">7.77 (-6.7*)</td><td class="num">6.48 (-8*)</td><td class="num">7.4 (-7.1*)</td><td class="num">10 (-4.4*)</td></tr>
+<tr><td>Contact (tilt, depth, slide)</td><td>Peak normal force (N)</td><td class="num">295</td><td class="num">427 (1.3e+02*)</td><td class="num">75 (-2.2e+02*)</td><td class="num">152 (-1.4e+02*)</td><td class="num">212 (-83*)</td><td class="num">106 (-1.9e+02*)</td><td class="num">116 (-1.8e+02*)</td><td class="num">156 (-1.4e+02*)</td></tr>
+<tr><td>Contact (tilt, depth, slide)</td><td>Peak of the 20 ms low-pass filtered normal force (sustained force) (N)</td><td class="num">136</td><td class="num">210 (75*)</td><td class="num">38 (-98*)</td><td class="num">76.1 (-60*)</td><td class="num">101 (-34*)</td><td class="num">52.8 (-83*)</td><td class="num">58.8 (-77*)</td><td class="num">78.8 (-57*)</td></tr>
+<tr><td>Contact (tilt, depth, slide)</td><td>Feasible-direction tool error (m)</td><td class="num">0.0299</td><td class="num">0.0156 (-0.014*)</td><td class="num">0.0265 (-0.0034)</td><td class="num">0.0285 (-0.0015)</td><td class="num">0.0263 (-0.0036)</td><td class="num">0.0225 (-0.0074)</td><td class="num">0.0181 (-0.012)</td><td class="num">0.019 (-0.011)</td></tr>
+<tr><td>Contact (tilt, depth, slide)</td><td>Press-phase force deficit below 5 N (N)</td><td class="num">1.1</td><td class="num">0 (-1.1*)</td><td class="num">1.35 (0.24)</td><td class="num">1.1 (-0.0038)</td><td class="num">0.625 (-0.48)</td><td class="num">1.08 (-0.019)</td><td class="num">1.1 (-0.00017)</td><td class="num">0.765 (-0.34)</td></tr>
+<tr><td>Contact (tilt, depth, slide)</td><td>Contact losses of 5 ms or more during contact phase (-)</td><td class="num">17.9</td><td class="num">4.12 (-14*)</td><td class="num">11.8 (-6.1)</td><td class="num">9.12 (-8.8)</td><td class="num">17.5 (-0.38)</td><td class="num">34.1 (16)</td><td class="num">36.2 (18)</td><td class="num">19.4 (1.5)</td></tr>
+<tr><td>Contact (tilt, depth, slide)</td><td>Contact losses of 5 ms or more per second of press phase (1/s)</td><td class="num">10.7</td><td class="num">2.63 (-8.1*)</td><td class="num">6.63 (-4.1)</td><td class="num">4.64 (-6.1)</td><td class="num">10.4 (-0.37)</td><td class="num">16.3 (5.6)</td><td class="num">18.4 (7.7)</td><td class="num">11 (0.22)</td></tr>
+<tr><td>Task sequence</td><td>Excess contact force above 30 N (mean while in contact) (N)</td><td class="num">5.47</td><td class="num">10.6 (5.1*)</td><td class="num">0.97 (-4.5*)</td><td class="num">3.51 (-2)</td><td class="num">0.669 (-4.8*)</td><td class="num">0.382 (-5.1*)</td><td class="num">0.339 (-5.1*)</td><td class="num">0.613 (-4.9*)</td></tr>
+<tr><td>Task sequence</td><td>Excess contact force above the 15 N cap (mean while in contact) (N)</td><td class="num">13.1</td><td class="num">23.4 (10*)</td><td class="num">6.33 (-6.8*)</td><td class="num">11.2 (-2)</td><td class="num">1.95 (-11*)</td><td class="num">1.16 (-12*)</td><td class="num">1.06 (-12*)</td><td class="num">2.45 (-11*)</td></tr>
+<tr><td>Task sequence</td><td>Peak normal force (N)</td><td class="num">298</td><td class="num">103 (-1.9e+02*)</td><td class="num">54.2 (-2.4e+02*)</td><td class="num">46.4 (-2.5e+02*)</td><td class="num">61 (-2.4e+02*)</td><td class="num">43.9 (-2.5e+02*)</td><td class="num">46 (-2.5e+02*)</td><td class="num">61.2 (-2.4e+02*)</td></tr>
+<tr><td>Task sequence</td><td>Peak of the 20 ms low-pass filtered normal force (sustained force) (N)</td><td class="num">129</td><td class="num">74.8 (-54*)</td><td class="num">28.9 (-1e+02*)</td><td class="num">20.5 (-1.1e+02*)</td><td class="num">29.3 (-1e+02*)</td><td class="num">18.4 (-1.1e+02*)</td><td class="num">20.2 (-1.1e+02*)</td><td class="num">28 (-1e+02*)</td></tr>
+<tr><td>Task sequence</td><td>Feasible-direction tool error (m)</td><td class="num">0.0267</td><td class="num">0.007 (-0.02*)</td><td class="num">0.0296 (0.0029)</td><td class="num">0.0301 (0.0034)</td><td class="num">0.0246 (-0.0021)</td><td class="num">0.0201 (-0.0066)</td><td class="num">0.017 (-0.0097)</td><td class="num">0.0156 (-0.011*)</td></tr>
+<tr><td>Task sequence</td><td>Press-phase force deficit below 5 N (N)</td><td class="num">0</td><td class="num">0 (0)</td><td class="num">0.39 (0.39)</td><td class="num">2.29 (2.3*)</td><td class="num">1.19 (1.2)</td><td class="num">1.92 (1.9*)</td><td class="num">1.93 (1.9*)</td><td class="num">1.1 (1.1)</td></tr>
+<tr><td>Task sequence</td><td>Contact losses of 5 ms or more per second of press phase (1/s)</td><td class="num">14.3</td><td class="num">0 (-14*)</td><td class="num">10.3 (-4)</td><td class="num">6.45 (-7.9)</td><td class="num">15.7 (1.4)</td><td class="num">17.4 (3.1)</td><td class="num">15.9 (1.5)</td><td class="num">20.7 (6.4*)</td></tr>
+</tbody>
+</table><figure class="widget compare" id="fig-compare-speed_x1.5" data-widget="compare" data-src="data/compare_speed_x1.5.json" data-regime="free" data-metric="pos_rmse">
+<div class="widget-body">
+<p class="selection">Selection: Free joint-space motion, Position RMSE (rad); n = 8 cases. Mean with 95% bootstrap CI (1000 resamples); difference vs PD, shared gains (v2) is paired by case, failed cases dropped from the pair.</p>
+<table class="compare-table">
+<thead>
+<tr><th>Method</th><th class="num">Mean</th><th class="num">95% CI</th><th class="num">n</th><th class="num">Δ vs reference</th><th class="num">95% CI (paired)</th><th class="num">Pairs</th></tr>
+</thead>
+<tbody>
+<tr><td>PD, shared gains (v2)</td><td class="num">0.02481</td><td class="num">[0.02108, 0.02925]</td><td class="num">8</td><td class="num">reference</td><td class="num">—</td><td class="num">—</td></tr>
+<tr><td>PD, shared gains (v1)</td><td class="num">0.006383</td><td class="num">[0.004206, 0.009801]</td><td class="num">8</td><td class="num">-0.01843</td><td class="num">[-0.0207, -0.01618]</td><td class="num">8</td></tr>
+<tr><td>Neural torque, actor-critic, learned-model gradients</td><td class="num">0.07875</td><td class="num">[0.06526, 0.09394]</td><td class="num">8</td><td class="num">0.05393</td><td class="num">[0.03931, 0.06969]</td><td class="num">8</td></tr>
+<tr><td>PD + residual, actor-critic, learned-model gradients</td><td class="num">0.04118</td><td class="num">[0.03637, 0.04531]</td><td class="num">8</td><td class="num">0.01637</td><td class="num">[0.0115, 0.02099]</td><td class="num">8</td></tr>
+<tr><td>PD + residual, actor-critic, per-sample median clipping</td><td class="num">0.03789</td><td class="num">[0.03404, 0.04181]</td><td class="num">8</td><td class="num">0.01308</td><td class="num">[0.009625, 0.01811]</td><td class="num">8</td></tr>
+<tr><td>PD + residual, actor-critic, median clipping, rate weight 0.003</td><td class="num">0.02684</td><td class="num">[0.02357, 0.03027]</td><td class="num">8</td><td class="num">0.002026</td><td class="num">[-0.002493, 0.007003]</td><td class="num">8</td></tr>
+<tr><td>PD + residual, actor-critic, median clipping, rate weight 0.003, target history</td><td class="num">0.02208</td><td class="num">[0.01871, 0.02584]</td><td class="num">8</td><td class="num">-0.00273</td><td class="num">[-0.005628, 0.0008324]</td><td class="num">8</td></tr>
+<tr><td>PD + residual, actor-critic, median clipping, rate weight 0.003, 20 mrad kernel</td><td class="num">0.01887</td><td class="num">[0.01599, 0.02198]</td><td class="num">8</td><td class="num">-0.005944</td><td class="num">[-0.00977, -0.001968]</td><td class="num">8</td></tr>
+</tbody>
+</table>
+</div>
+<figcaption>Speed x1.5: per-case values; dots are cases, the tick the mean, the bar its 95% bootstrap interval. <a class="source" href="data/compare_speed_x1.5.json">Data (JSON)</a></figcaption>
+</figure>
+
+<h2>Speed x2</h2>
+<table class="wide">
+<caption>Speed x2: primary metrics (mean over cases; paired difference against PD with shared gains, starred when the 95% bootstrap interval excludes zero).</caption>
+<thead>
+<tr><th>Regime</th><th>Metric</th><th class="num">PD, shared gains (v2)</th><th class="num">PD, shared gains (v1)</th><th class="num">Neural torque, actor-critic, learned-model gradients</th><th class="num">PD + residual, actor-critic, learned-model gradients</th><th class="num">PD + residual, actor-critic, per-sample median clipping</th><th class="num">PD + residual, actor-critic, median clipping, rate weight 0.003</th><th class="num">PD + residual, actor-critic, median clipping, rate weight 0.003, target history</th><th class="num">PD + residual, actor-critic, median clipping, rate weight 0.003, 20 mrad kernel</th></tr>
+</thead>
+<tbody>
+<tr><td>Free joint-space motion</td><td>Position RMSE (rad)</td><td class="num">0.0326</td><td class="num">0.0102 (-0.022*)</td><td class="num">0.0993 (0.067*)</td><td class="num">0.0468 (0.014*)</td><td class="num">0.0448 (0.012*)</td><td class="num">0.034 (0.0014)</td><td class="num">0.0298 (-0.0028)</td><td class="num">0.0264 (-0.0062*)</td></tr>
+<tr><td>Free joint-space motion</td><td>Torque rate RMS (Nm/s)</td><td class="num">92.6</td><td class="num">216 (1.2e+02*)</td><td class="num">113 (20*)</td><td class="num">93.4 (0.82)</td><td class="num">95.3 (2.7)</td><td class="num">102 (9.2*)</td><td class="num">107 (15*)</td><td class="num">96.1 (3.5)</td></tr>
+<tr><td>Policy-like targets</td><td>Position RMSE (rad)</td><td class="num">0.0975</td><td class="num">0.0541 (-0.043*)</td><td class="num">0.161 (0.063*)</td><td class="num">0.11 (0.012)</td><td class="num">0.111 (0.013)</td><td class="num">0.084 (-0.013*)</td><td class="num">0.0832 (-0.014*)</td><td class="num">0.0827 (-0.015*)</td></tr>
+<tr><td>Policy-like targets</td><td>Torque rate RMS (Nm/s)</td><td class="num">1.99e+03</td><td class="num">5.85e+03 (3.9e+03*)</td><td class="num">517 (-1.5e+03*)</td><td class="num">1.22e+03 (-7.7e+02*)</td><td class="num">1.15e+03 (-8.4e+02*)</td><td class="num">1.48e+03 (-5.1e+02*)</td><td class="num">919 (-1.1e+03*)</td><td class="num">1.76e+03 (-2.3e+02*)</td></tr>
+<tr><td>Contact (tilt, depth, slide)</td><td>Excess contact force above 30 N (mean while in contact) (N)</td><td class="num">9.4</td><td class="num">31.8 (22*)</td><td class="num">4.62 (-4.8)</td><td class="num">6.42 (-3)</td><td class="num">4.88 (-4.5*)</td><td class="num">2.88 (-6.5*)</td><td class="num">2.63 (-6.8*)</td><td class="num">3.69 (-5.7*)</td></tr>
+<tr><td>Contact (tilt, depth, slide)</td><td>Excess contact force above the 15 N cap (mean while in contact) (N)</td><td class="num">16.3</td><td class="num">44.9 (29*)</td><td class="num">10.5 (-5.8)</td><td class="num">12.4 (-3.9)</td><td class="num">9.29 (-7*)</td><td class="num">6.94 (-9.4*)</td><td class="num">6.07 (-10*)</td><td class="num">10.1 (-6.2*)</td></tr>
+<tr><td>Contact (tilt, depth, slide)</td><td>Peak normal force (N)</td><td class="num">356</td><td class="num">500 (1.4e+02*)</td><td class="num">92.9 (-2.6e+02*)</td><td class="num">167 (-1.9e+02*)</td><td class="num">245 (-1.1e+02*)</td><td class="num">129 (-2.3e+02*)</td><td class="num">124 (-2.3e+02*)</td><td class="num">156 (-2e+02*)</td></tr>
+<tr><td>Contact (tilt, depth, slide)</td><td>Peak of the 20 ms low-pass filtered normal force (sustained force) (N)</td><td class="num">161</td><td class="num">227 (65*)</td><td class="num">44.6 (-1.2e+02*)</td><td class="num">82.2 (-79*)</td><td class="num">112 (-49*)</td><td class="num">58.1 (-1e+02*)</td><td class="num">56.4 (-1e+02*)</td><td class="num">74.3 (-87*)</td></tr>
+<tr><td>Contact (tilt, depth, slide)</td><td>Feasible-direction tool error (m)</td><td class="num">0.0245</td><td class="num">0.0133 (-0.011*)</td><td class="num">0.0251 (0.00057)</td><td class="num">0.0294 (0.005)</td><td class="num">0.0235 (-0.001)</td><td class="num">0.0216 (-0.0029)</td><td class="num">0.0177 (-0.0067)</td><td class="num">0.0185 (-0.0059)</td></tr>
+<tr><td>Contact (tilt, depth, slide)</td><td>Press-phase force deficit below 5 N (N)</td><td class="num">0.511</td><td class="num">0 (-0.51)</td><td class="num">1.62 (1.1*)</td><td class="num">1.7 (1.2)</td><td class="num">0.625 (0.11)</td><td class="num">1.59 (1.1)</td><td class="num">1.5 (0.98)</td><td class="num">0.775 (0.26)</td></tr>
+<tr><td>Contact (tilt, depth, slide)</td><td>Contact losses of 5 ms or more during contact phase (-)</td><td class="num">24.8</td><td class="num">7.25 (-18*)</td><td class="num">14.4 (-10)</td><td class="num">6.5 (-18*)</td><td class="num">21.2 (-3.5)</td><td class="num">28.9 (4.1)</td><td class="num">30.2 (5.5)</td><td class="num">23.5 (-1.2)</td></tr>
+<tr><td>Contact (tilt, depth, slide)</td><td>Contact losses of 5 ms or more per second of press phase (1/s)</td><td class="num">16.6</td><td class="num">5.19 (-11*)</td><td class="num">8.92 (-7.7*)</td><td class="num">3.59 (-13*)</td><td class="num">12.9 (-3.7)</td><td class="num">15.9 (-0.7)</td><td class="num">17.8 (1.1)</td><td class="num">14.9 (-1.7)</td></tr>
+<tr><td>Task sequence</td><td>Excess contact force above 30 N (mean while in contact) (N)</td><td class="num">7.35</td><td class="num">10.5 (3.2*)</td><td class="num">2 (-5.3*)</td><td class="num">31.6 (24)</td><td class="num">4.55 (-2.8)</td><td class="num">0.681 (-6.7*)</td><td class="num">0.688 (-6.7*)</td><td class="num">1.08 (-6.3*)</td></tr>
+<tr><td>Task sequence</td><td>Excess contact force above the 15 N cap (mean while in contact) (N)</td><td class="num">13.8</td><td class="num">21.1 (7.2*)</td><td class="num">7.13 (-6.7*)</td><td class="num">38.6 (25)</td><td class="num">9.09 (-4.7)</td><td class="num">1.31 (-13*)</td><td class="num">1.32 (-13*)</td><td class="num">2.62 (-11*)</td></tr>
+<tr><td>Task sequence</td><td>Peak normal force (N)</td><td class="num">360</td><td class="num">146 (-2.1e+02*)</td><td class="num">70.7 (-2.9e+02*)</td><td class="num">68.9 (-2.9e+02*)</td><td class="num">77.8 (-2.8e+02*)</td><td class="num">42.6 (-3.2e+02*)</td><td class="num">44.2 (-3.2e+02*)</td><td class="num">53.9 (-3.1e+02*)</td></tr>
+<tr><td>Task sequence</td><td>Peak of the 20 ms low-pass filtered normal force (sustained force) (N)</td><td class="num">138</td><td class="num">91.6 (-46)</td><td class="num">31.5 (-1.1e+02*)</td><td class="num">22.8 (-1.2e+02*)</td><td class="num">37.2 (-1e+02*)</td><td class="num">19.5 (-1.2e+02*)</td><td class="num">20.1 (-1.2e+02*)</td><td class="num">27.3 (-1.1e+02*)</td></tr>
+<tr><td>Task sequence</td><td>Feasible-direction tool error (m)</td><td class="num">0.0246</td><td class="num">0.00724 (-0.017*)</td><td class="num">0.0303 (0.0057)</td><td class="num">0.0399 (0.015)</td><td class="num">0.0302 (0.0056)</td><td class="num">0.0267 (0.0021)</td><td class="num">0.0232 (-0.0014)</td><td class="num">0.0201 (-0.0045)</td></tr>
+<tr><td>Task sequence</td><td>Press-phase force deficit below 5 N (N)</td><td class="num">0.451</td><td class="num">0 (-0.45*)</td><td class="num">0.698 (0.25)</td><td class="num">3.75 (3.3*)</td><td class="num">2.5 (2*)</td><td class="num">2.5 (2*)</td><td class="num">2.5 (2*)</td><td class="num">2.49 (2*)</td></tr>
+<tr><td>Task sequence</td><td>Contact losses of 5 ms or more per second of press phase (1/s)</td><td class="num">14.9</td><td class="num">5.26 (-9.6*)</td><td class="num">15 (0.16)</td><td class="num">2.39 (-12*)</td><td class="num">11.6 (-3.2)</td><td class="num">11.2 (-3.6)</td><td class="num">11 (-3.9)</td><td class="num">11.2 (-3.7)</td></tr>
+</tbody>
+</table><figure class="widget compare" id="fig-compare-speed_x2" data-widget="compare" data-src="data/compare_speed_x2.json" data-regime="free" data-metric="pos_rmse">
+<div class="widget-body">
+<p class="selection">Selection: Free joint-space motion, Position RMSE (rad); n = 8 cases. Mean with 95% bootstrap CI (1000 resamples); difference vs PD, shared gains (v2) is paired by case, failed cases dropped from the pair.</p>
+<table class="compare-table">
+<thead>
+<tr><th>Method</th><th class="num">Mean</th><th class="num">95% CI</th><th class="num">n</th><th class="num">Δ vs reference</th><th class="num">95% CI (paired)</th><th class="num">Pairs</th></tr>
+</thead>
+<tbody>
+<tr><td>PD, shared gains (v2)</td><td class="num">0.0326</td><td class="num">[0.02853, 0.03798]</td><td class="num">8</td><td class="num">reference</td><td class="num">—</td><td class="num">—</td></tr>
+<tr><td>PD, shared gains (v1)</td><td class="num">0.01015</td><td class="num">[0.006387, 0.01612]</td><td class="num">8</td><td class="num">-0.02245</td><td class="num">[-0.02479, -0.02012]</td><td class="num">8</td></tr>
+<tr><td>Neural torque, actor-critic, learned-model gradients</td><td class="num">0.09925</td><td class="num">[0.08724, 0.1149]</td><td class="num">8</td><td class="num">0.06665</td><td class="num">[0.0527, 0.0825]</td><td class="num">8</td></tr>
+<tr><td>PD + residual, actor-critic, learned-model gradients</td><td class="num">0.04676</td><td class="num">[0.04226, 0.05086]</td><td class="num">8</td><td class="num">0.01416</td><td class="num">[0.009485, 0.01845]</td><td class="num">8</td></tr>
+<tr><td>PD + residual, actor-critic, per-sample median clipping</td><td class="num">0.04476</td><td class="num">[0.03953, 0.05]</td><td class="num">8</td><td class="num">0.01216</td><td class="num">[0.008823, 0.01726]</td><td class="num">8</td></tr>
+<tr><td>PD + residual, actor-critic, median clipping, rate weight 0.003</td><td class="num">0.03401</td><td class="num">[0.02994, 0.03827]</td><td class="num">8</td><td class="num">0.001413</td><td class="num">[-0.002634, 0.005948]</td><td class="num">8</td></tr>
+<tr><td>PD + residual, actor-critic, median clipping, rate weight 0.003, target history</td><td class="num">0.02978</td><td class="num">[0.02537, 0.03441]</td><td class="num">8</td><td class="num">-0.002823</td><td class="num">[-0.005392, 0.0002828]</td><td class="num">8</td></tr>
+<tr><td>PD + residual, actor-critic, median clipping, rate weight 0.003, 20 mrad kernel</td><td class="num">0.02639</td><td class="num">[0.02205, 0.03089]</td><td class="num">8</td><td class="num">-0.006211</td><td class="num">[-0.009263, -0.002976]</td><td class="num">8</td></tr>
+</tbody>
+</table>
+</div>
+<figcaption>Speed x2: per-case values; dots are cases, the tick the mean, the bar its 95% bootstrap interval. <a class="source" href="data/compare_speed_x2.json">Data (JSON)</a></figcaption>
+</figure>
+
+<h2>Payload 3 kg</h2>
+<table class="wide">
+<caption>Payload 3 kg: primary metrics (mean over cases; paired difference against PD with shared gains, starred when the 95% bootstrap interval excludes zero).</caption>
+<thead>
+<tr><th>Regime</th><th>Metric</th><th class="num">PD, shared gains (v2)</th><th class="num">PD, shared gains (v1)</th><th class="num">Neural torque, actor-critic, learned-model gradients</th><th class="num">PD + residual, actor-critic, learned-model gradients</th><th class="num">PD + residual, actor-critic, per-sample median clipping</th><th class="num">PD + residual, actor-critic, median clipping, rate weight 0.003</th><th class="num">PD + residual, actor-critic, median clipping, rate weight 0.003, target history</th><th class="num">PD + residual, actor-critic, median clipping, rate weight 0.003, 20 mrad kernel</th></tr>
+</thead>
+<tbody>
+<tr><td>Free joint-space motion</td><td>Position RMSE (rad)</td><td class="num">0.0486</td><td class="num">0.00822 (-0.04*)</td><td class="num">0.0941 (0.046*)</td><td class="num">0.0511 (0.0025)</td><td class="num">0.0448 (-0.0038)</td><td class="num">0.0287 (-0.02*)</td><td class="num">0.0263 (-0.022*)</td><td class="num">0.0239 (-0.025*)</td></tr>
+<tr><td>Free joint-space motion</td><td>Torque rate RMS (Nm/s)</td><td class="num">58</td><td class="num">172 (1.1e+02*)</td><td class="num">64.2 (6.2)</td><td class="num">49.5 (-8.5*)</td><td class="num">47.4 (-11*)</td><td class="num">49 (-9*)</td><td class="num">48.7 (-9.3*)</td><td class="num">47.2 (-11*)</td></tr>
+<tr><td>Contact (tilt, depth, slide)</td><td>Excess contact force above 30 N (mean while in contact) (N)</td><td class="num">11.6</td><td class="num">44.4 (33*)</td><td class="num">6.34 (-5.3)</td><td class="num">7.6 (-4)</td><td class="num">4.28 (-7.3*)</td><td class="num">5.87 (-5.7)</td><td class="num">3.21 (-8.4*)</td><td class="num">5.97 (-5.6*)</td></tr>
+<tr><td>Contact (tilt, depth, slide)</td><td>Excess contact force above the 15 N cap (mean while in contact) (N)</td><td class="num">22</td><td class="num">59.1 (37*)</td><td class="num">14.5 (-7.4)</td><td class="num">14.7 (-7.3)</td><td class="num">15.1 (-6.9)</td><td class="num">14.4 (-7.5)</td><td class="num">9.99 (-12*)</td><td class="num">16.8 (-5.2)</td></tr>
+<tr><td>Contact (tilt, depth, slide)</td><td>Peak normal force (N)</td><td class="num">292</td><td class="num">286 (-6)</td><td class="num">93.5 (-2e+02*)</td><td class="num">147 (-1.4e+02*)</td><td class="num">196 (-96*)</td><td class="num">152 (-1.4e+02*)</td><td class="num">135 (-1.6e+02*)</td><td class="num">152 (-1.4e+02*)</td></tr>
+<tr><td>Contact (tilt, depth, slide)</td><td>Peak of the 20 ms low-pass filtered normal force (sustained force) (N)</td><td class="num">136</td><td class="num">174 (38)</td><td class="num">50.2 (-86*)</td><td class="num">72.9 (-63*)</td><td class="num">97.7 (-38*)</td><td class="num">76.9 (-59*)</td><td class="num">72.5 (-64*)</td><td class="num">81.2 (-55*)</td></tr>
+<tr><td>Contact (tilt, depth, slide)</td><td>Feasible-direction tool error (m)</td><td class="num">0.0502</td><td class="num">0.0179 (-0.032*)</td><td class="num">0.0364 (-0.014)</td><td class="num">0.029 (-0.021)</td><td class="num">0.0337 (-0.017)</td><td class="num">0.0218 (-0.028*)</td><td class="num">0.0205 (-0.03*)</td><td class="num">0.0233 (-0.027*)</td></tr>
+<tr><td>Contact (tilt, depth, slide)</td><td>Press-phase force deficit below 5 N (N)</td><td class="num">1.16</td><td class="num">0 (-1.2)</td><td class="num">0.625 (-0.53)</td><td class="num">0 (-1.2)</td><td class="num">1.1 (-0.062)</td><td class="num">0.625 (-0.53)</td><td class="num">0.7 (-0.46)</td><td class="num">0.546 (-0.61)</td></tr>
+<tr><td>Contact (tilt, depth, slide)</td><td>Contact losses of 5 ms or more during contact phase (-)</td><td class="num">3.75</td><td class="num">0 (-3.8*)</td><td class="num">5.38 (1.6*)</td><td class="num">15.2 (12)</td><td class="num">8.5 (4.8*)</td><td class="num">15 (11*)</td><td class="num">14 (10*)</td><td class="num">9.38 (5.6)</td></tr>
+<tr><td>Contact (tilt, depth, slide)</td><td>Contact losses of 5 ms or more per second of press phase (1/s)</td><td class="num">2.17</td><td class="num">0 (-2.2*)</td><td class="num">2.94 (0.77*)</td><td class="num">7.87 (5.7)</td><td class="num">4.67 (2.5*)</td><td class="num">7.78 (5.6*)</td><td class="num">6.81 (4.6*)</td><td class="num">4.92 (2.8)</td></tr>
+<tr><td>Blocked reference</td><td>Excess contact force above 30 N (mean while in contact) (N)</td><td class="num">46.3</td><td class="num">179 (1.3e+02*)</td><td class="num">21.8 (-24*)</td><td class="num">13.2 (-33*)</td><td class="num">16.2 (-30*)</td><td class="num">26 (-20*)</td><td class="num">29.8 (-17*)</td><td class="num">35 (-11*)</td></tr>
+<tr><td>Blocked reference</td><td>Excess contact force above the 15 N cap (mean while in contact) (N)</td><td class="num">57.2</td><td class="num">193 (1.4e+02*)</td><td class="num">34.4 (-23*)</td><td class="num">26.5 (-31)</td><td class="num">28 (-29*)</td><td class="num">40.1 (-17)</td><td class="num">43.4 (-14*)</td><td class="num">49.3 (-7.9)</td></tr>
+<tr><td>Blocked reference</td><td>Peak normal force (N)</td><td class="num">117</td><td class="num">267 (1.5e+02*)</td><td class="num">110 (-7)</td><td class="num">136 (19)</td><td class="num">140 (23)</td><td class="num">134 (17)</td><td class="num">126 (9.5)</td><td class="num">134 (17)</td></tr>
+<tr><td>Blocked reference</td><td>Peak of the 20 ms low-pass filtered normal force (sustained force) (N)</td><td class="num">82.8</td><td class="num">258 (1.7e+02*)</td><td class="num">62.7 (-20*)</td><td class="num">79.3 (-3.5)</td><td class="num">74.2 (-8.6)</td><td class="num">76.7 (-6)</td><td class="num">76 (-6.8)</td><td class="num">82.6 (-0.14)</td></tr>
+<tr><td>Blocked reference</td><td>Feasible-direction tool error (m)</td><td class="num">0.0847</td><td class="num">0.018 (-0.067*)</td><td class="num">0.0464 (-0.038*)</td><td class="num">0.0328 (-0.052*)</td><td class="num">0.0406 (-0.044*)</td><td class="num">0.0281 (-0.057*)</td><td class="num">0.0242 (-0.061*)</td><td class="num">0.0254 (-0.059*)</td></tr>
+<tr><td>Blocked reference</td><td>Recovery after a blocked reference returns (s)</td><td class="num">1.57</td><td class="num">0.421 (-1.2*)</td><td class="num">1.19 (-0.39)</td><td class="num">1.09 (-0.48)</td><td class="num">0.853 (-0.72*)</td><td class="num">0.675 (-0.9*)</td><td class="num">0.8 (-0.77*)</td><td class="num">0.639 (-0.94*)</td></tr>
+<tr><td>Blocked reference</td><td>Apparent stiffness: mean normal force per metre of reference depth while blocked (after the first 0.3 s of contact) (N/m)</td><td class="num">1.47e+03</td><td class="num">4.62e+03 (3.1e+03*)</td><td class="num">931 (-5.4e+02*)</td><td class="num">878 (-5.9e+02)</td><td class="num">802 (-6.7e+02*)</td><td class="num">1.06e+03 (-4.1e+02)</td><td class="num">1.12e+03 (-3.5e+02)</td><td class="num">1.27e+03 (-2e+02)</td></tr>
+<tr><td>Task sequence</td><td>Excess contact force above 30 N (mean while in contact) (N)</td><td class="num">18.2</td><td class="num">27.1 (8.8*)</td><td class="num">1.83 (-16*)</td><td class="num">2.98 (-15*)</td><td class="num">0.488 (-18*)</td><td class="num">0.615 (-18*)</td><td class="num">0.59 (-18*)</td><td class="num">1.01 (-17*)</td></tr>
+<tr><td>Task sequence</td><td>Excess contact force above the 15 N cap (mean while in contact) (N)</td><td class="num">29.8</td><td class="num">41.6 (12*)</td><td class="num">10.4 (-19*)</td><td class="num">7.54 (-22*)</td><td class="num">9.83 (-20*)</td><td class="num">6.49 (-23*)</td><td class="num">6.31 (-24*)</td><td class="num">11 (-19*)</td></tr>
+<tr><td>Task sequence</td><td>Peak normal force (N)</td><td class="num">297</td><td class="num">88.3 (-2.1e+02*)</td><td class="num">60.7 (-2.4e+02*)</td><td class="num">57.8 (-2.4e+02*)</td><td class="num">89.4 (-2.1e+02*)</td><td class="num">68.7 (-2.3e+02*)</td><td class="num">71.9 (-2.2e+02*)</td><td class="num">68.7 (-2.3e+02*)</td></tr>
+<tr><td>Task sequence</td><td>Peak of the 20 ms low-pass filtered normal force (sustained force) (N)</td><td class="num">140</td><td class="num">86.3 (-54*)</td><td class="num">36.9 (-1e+02*)</td><td class="num">35 (-1e+02*)</td><td class="num">39.2 (-1e+02*)</td><td class="num">34.7 (-1.1e+02*)</td><td class="num">36.1 (-1e+02*)</td><td class="num">34.9 (-1e+02*)</td></tr>
+<tr><td>Task sequence</td><td>Feasible-direction tool error (m)</td><td class="num">0.0636</td><td class="num">0.0113 (-0.052*)</td><td class="num">0.0285 (-0.035*)</td><td class="num">0.0213 (-0.042*)</td><td class="num">0.0287 (-0.035*)</td><td class="num">0.0179 (-0.046*)</td><td class="num">0.0156 (-0.048*)</td><td class="num">0.0179 (-0.046*)</td></tr>
+<tr><td>Task sequence</td><td>Press-phase force deficit below 5 N (N)</td><td class="num">0</td><td class="num">0 (0)</td><td class="num">0 (0)</td><td class="num">0.0556 (0.056)</td><td class="num">0 (0)</td><td class="num">0 (0)</td><td class="num">0 (0)</td><td class="num">0 (0)</td></tr>
+<tr><td>Task sequence</td><td>Contact losses of 5 ms or more per second of press phase (1/s)</td><td class="num">0</td><td class="num">0 (0)</td><td class="num">1.41 (1.4*)</td><td class="num">12.7 (13*)</td><td class="num">0.218 (0.22*)</td><td class="num">6.27 (6.3*)</td><td class="num">11.1 (11*)</td><td class="num">1.53 (1.5*)</td></tr>
+</tbody>
+</table><figure class="widget compare" id="fig-compare-payload_3kg" data-widget="compare" data-src="data/compare_payload_3kg.json" data-regime="free" data-metric="pos_rmse">
+<div class="widget-body">
+<p class="selection">Selection: Free joint-space motion, Position RMSE (rad); n = 8 cases. Mean with 95% bootstrap CI (1000 resamples); difference vs PD, shared gains (v2) is paired by case, failed cases dropped from the pair.</p>
+<table class="compare-table">
+<thead>
+<tr><th>Method</th><th class="num">Mean</th><th class="num">95% CI</th><th class="num">n</th><th class="num">Δ vs reference</th><th class="num">95% CI (paired)</th><th class="num">Pairs</th></tr>
+</thead>
+<tbody>
+<tr><td>PD, shared gains (v2)</td><td class="num">0.04858</td><td class="num">[0.04098, 0.05672]</td><td class="num">8</td><td class="num">reference</td><td class="num">—</td><td class="num">—</td></tr>
+<tr><td>PD, shared gains (v1)</td><td class="num">0.008222</td><td class="num">[0.006531, 0.009943]</td><td class="num">8</td><td class="num">-0.04036</td><td class="num">[-0.04696, -0.03353]</td><td class="num">8</td></tr>
+<tr><td>Neural torque, actor-critic, learned-model gradients</td><td class="num">0.09413</td><td class="num">[0.0676, 0.1295]</td><td class="num">8</td><td class="num">0.04555</td><td class="num">[0.02444, 0.06987]</td><td class="num">8</td></tr>
+<tr><td>PD + residual, actor-critic, learned-model gradients</td><td class="num">0.0511</td><td class="num">[0.04353, 0.05902]</td><td class="num">8</td><td class="num">0.002518</td><td class="num">[-0.003719, 0.009344]</td><td class="num">8</td></tr>
+<tr><td>PD + residual, actor-critic, per-sample median clipping</td><td class="num">0.0448</td><td class="num">[0.04073, 0.04912]</td><td class="num">8</td><td class="num">-0.003787</td><td class="num">[-0.01035, 0.001929]</td><td class="num">8</td></tr>
+<tr><td>PD + residual, actor-critic, median clipping, rate weight 0.003</td><td class="num">0.02866</td><td class="num">[0.02413, 0.03446]</td><td class="num">8</td><td class="num">-0.01992</td><td class="num">[-0.02506, -0.01541]</td><td class="num">8</td></tr>
+<tr><td>PD + residual, actor-critic, median clipping, rate weight 0.003, target history</td><td class="num">0.0263</td><td class="num">[0.01992, 0.03495]</td><td class="num">8</td><td class="num">-0.02229</td><td class="num">[-0.0281, -0.01675]</td><td class="num">8</td></tr>
+<tr><td>PD + residual, actor-critic, median clipping, rate weight 0.003, 20 mrad kernel</td><td class="num">0.02393</td><td class="num">[0.01886, 0.02948]</td><td class="num">8</td><td class="num">-0.02466</td><td class="num">[-0.02943, -0.02043]</td><td class="num">8</td></tr>
+</tbody>
+</table>
+</div>
+<figcaption>Payload 3 kg: per-case values; dots are cases, the tick the mean, the bar its 95% bootstrap interval. <a class="source" href="data/compare_payload_3kg.json">Data (JSON)</a></figcaption>
+</figure>
+
+<h2>Held-out robot instances (doubled deviations)</h2>
+<table class="wide">
+<caption>Held-out robot instances (doubled deviations): primary metrics (mean over cases; paired difference against PD with shared gains, starred when the 95% bootstrap interval excludes zero).</caption>
+<thead>
+<tr><th>Regime</th><th>Metric</th><th class="num">PD, shared gains (v2)</th><th class="num">PD, shared gains (v1)</th><th class="num">Neural torque, actor-critic, learned-model gradients</th><th class="num">PD + residual, actor-critic, learned-model gradients</th><th class="num">PD + residual, actor-critic, per-sample median clipping</th><th class="num">PD + residual, actor-critic, median clipping, rate weight 0.003</th><th class="num">PD + residual, actor-critic, median clipping, rate weight 0.003, target history</th><th class="num">PD + residual, actor-critic, median clipping, rate weight 0.003, 20 mrad kernel</th></tr>
+</thead>
+<tbody>
+<tr><td>Free joint-space motion</td><td>Position RMSE (rad)</td><td class="num">0.0184</td><td class="num">0.00375 (-0.015*)</td><td class="num">0.0597 (0.041*)</td><td class="num">0.0382 (0.02*)</td><td class="num">0.0341 (0.016*)</td><td class="num">0.021 (0.0026)</td><td class="num">0.016 (-0.0024)</td><td class="num">0.0136 (-0.0047)</td></tr>
+<tr><td>Free joint-space motion</td><td>Torque rate RMS (Nm/s)</td><td class="num">51.5</td><td class="num">172 (1.2e+02*)</td><td class="num">50.3 (-1.2)</td><td class="num">43.5 (-8*)</td><td class="num">43.3 (-8.3*)</td><td class="num">46.5 (-5*)</td><td class="num">44.5 (-7*)</td><td class="num">43.7 (-7.9*)</td></tr>
+<tr><td>Policy-like targets</td><td>Position RMSE (rad)</td><td class="num">0.0612</td><td class="num">0.0351 (-0.026*)</td><td class="num">0.115 (0.054*)</td><td class="num">0.077 (0.016*)</td><td class="num">0.0763 (0.015*)</td><td class="num">0.0524 (-0.0088*)</td><td class="num">0.0494 (-0.012*)</td><td class="num">0.0519 (-0.0093*)</td></tr>
+<tr><td>Policy-like targets</td><td>Torque rate RMS (Nm/s)</td><td class="num">1.89e+03</td><td class="num">5.24e+03 (3.4e+03*)</td><td class="num">516 (-1.4e+03*)</td><td class="num">1.06e+03 (-8.3e+02*)</td><td class="num">1.01e+03 (-8.8e+02*)</td><td class="num">1.37e+03 (-5.2e+02*)</td><td class="num">858 (-1e+03*)</td><td class="num">1.66e+03 (-2.2e+02*)</td></tr>
+<tr><td>Contact (tilt, depth, slide)</td><td>Excess contact force above 30 N (mean while in contact) (N)</td><td class="num">8.01</td><td class="num">54.7 (47*)</td><td class="num">6.46 (-1.6)</td><td class="num">6.57 (-1.4)</td><td class="num">4.83 (-3.2)</td><td class="num">5.52 (-2.5)</td><td class="num">5.11 (-2.9)</td><td class="num">7.82 (-0.2)</td></tr>
+<tr><td>Contact (tilt, depth, slide)</td><td>Excess contact force above the 15 N cap (mean while in contact) (N)</td><td class="num">15.6</td><td class="num">67.9 (52*)</td><td class="num">13.8 (-1.8)</td><td class="num">12.5 (-3.1)</td><td class="num">9.94 (-5.7*)</td><td class="num">9.55 (-6)</td><td class="num">10.5 (-5.1)</td><td class="num">15 (-0.63)</td></tr>
+<tr><td>Contact (tilt, depth, slide)</td><td>Peak normal force (N)</td><td class="num">217</td><td class="num">259 (41)</td><td class="num">60.7 (-1.6e+02*)</td><td class="num">90.7 (-1.3e+02*)</td><td class="num">130 (-87*)</td><td class="num">80.7 (-1.4e+02*)</td><td class="num">93.8 (-1.2e+02*)</td><td class="num">112 (-1.1e+02*)</td></tr>
+<tr><td>Contact (tilt, depth, slide)</td><td>Peak of the 20 ms low-pass filtered normal force (sustained force) (N)</td><td class="num">113</td><td class="num">170 (57*)</td><td class="num">40.4 (-72*)</td><td class="num">48.3 (-64*)</td><td class="num">70 (-43*)</td><td class="num">44.3 (-68*)</td><td class="num">52.2 (-60*)</td><td class="num">63.8 (-49*)</td></tr>
+<tr><td>Contact (tilt, depth, slide)</td><td>Feasible-direction tool error (m)</td><td class="num">0.022</td><td class="num">0.0156 (-0.0065)</td><td class="num">0.0295 (0.0074)</td><td class="num">0.0314 (0.0094)</td><td class="num">0.0263 (0.0043*)</td><td class="num">0.0212 (-0.00079)</td><td class="num">0.0192 (-0.0028)</td><td class="num">0.0205 (-0.0016)</td></tr>
+<tr><td>Contact (tilt, depth, slide)</td><td>Press-phase force deficit below 5 N (N)</td><td class="num">0.784</td><td class="num">0 (-0.78)</td><td class="num">1.24 (0.45)</td><td class="num">0.899 (0.11)</td><td class="num">0.542 (-0.24)</td><td class="num">1.11 (0.32)</td><td class="num">1.13 (0.34)</td><td class="num">0.746 (-0.038)</td></tr>
+<tr><td>Contact (tilt, depth, slide)</td><td>Contact losses of 5 ms or more during contact phase (-)</td><td class="num">21.6</td><td class="num">0 (-22*)</td><td class="num">5.25 (-16)</td><td class="num">17.8 (-3.9)</td><td class="num">10.9 (-11)</td><td class="num">37.1 (16)</td><td class="num">40.5 (19)</td><td class="num">14.6 (-7)</td></tr>
+<tr><td>Contact (tilt, depth, slide)</td><td>Contact losses of 5 ms or more per second of press phase (1/s)</td><td class="num">10.4</td><td class="num">0 (-10*)</td><td class="num">2.58 (-7.8)</td><td class="num">7.2 (-3.2)</td><td class="num">5.94 (-4.5)</td><td class="num">13.1 (2.7)</td><td class="num">14.5 (4.1)</td><td class="num">7 (-3.4)</td></tr>
+<tr><td>Blocked reference</td><td>Excess contact force above 30 N (mean while in contact) (N)</td><td class="num">19.1</td><td class="num">148 (1.3e+02*)</td><td class="num">48.8 (30*)</td><td class="num">11 (-8.1)</td><td class="num">8.63 (-10*)</td><td class="num">18.9 (-0.25)</td><td class="num">23.7 (4.6)</td><td class="num">27.4 (8.3)</td></tr>
+<tr><td>Blocked reference</td><td>Excess contact force above the 15 N cap (mean while in contact) (N)</td><td class="num">31.2</td><td class="num">163 (1.3e+02*)</td><td class="num">63.1 (32*)</td><td class="num">20.8 (-10)</td><td class="num">20.4 (-11*)</td><td class="num">32 (0.8)</td><td class="num">37.6 (6.3)</td><td class="num">41.4 (10)</td></tr>
+<tr><td>Blocked reference</td><td>Peak normal force (N)</td><td class="num">112</td><td class="num">233 (1.2e+02*)</td><td class="num">121 (8.8)</td><td class="num">92.4 (-20)</td><td class="num">98 (-14)</td><td class="num">98 (-14)</td><td class="num">99 (-13)</td><td class="num">103 (-8.8)</td></tr>
+<tr><td>Blocked reference</td><td>Peak of the 20 ms low-pass filtered normal force (sustained force) (N)</td><td class="num">73.6</td><td class="num">224 (1.5e+02*)</td><td class="num">108 (34)</td><td class="num">58.2 (-15)</td><td class="num">57.4 (-16*)</td><td class="num">64.8 (-8.8)</td><td class="num">69.3 (-4.3)</td><td class="num">73.4 (-0.23)</td></tr>
+<tr><td>Blocked reference</td><td>Feasible-direction tool error (m)</td><td class="num">0.0431</td><td class="num">0.0173 (-0.026*)</td><td class="num">0.0392 (-0.0039)</td><td class="num">0.0457 (0.0026)</td><td class="num">0.0362 (-0.0069)</td><td class="num">0.0289 (-0.014)</td><td class="num">0.0248 (-0.018)</td><td class="num">0.023 (-0.02*)</td></tr>
+<tr><td>Blocked reference</td><td>Recovery after a blocked reference returns (s)</td><td class="num">0.823</td><td class="num">0.133 (-0.69*)</td><td class="num">1.32 (0.5)</td><td class="num">1.2 (0.38)</td><td class="num">0.856 (0.033)</td><td class="num">0.479 (-0.34)</td><td class="num">0.659 (-0.16)</td><td class="num">0.759 (-0.064)</td></tr>
+<tr><td>Blocked reference</td><td>Apparent stiffness: mean normal force per metre of reference depth while blocked (after the first 0.3 s of contact) (N/m)</td><td class="num">884</td><td class="num">4.03e+03 (3.1e+03*)</td><td class="num">1.63e+03 (7.5e+02)</td><td class="num">786 (-98)</td><td class="num">667 (-2.2e+02)</td><td class="num">926 (42)</td><td class="num">1.03e+03 (1.4e+02)</td><td class="num">1.13e+03 (2.5e+02)</td></tr>
+</tbody>
+</table><figure class="widget compare" id="fig-compare-ood_instances" data-widget="compare" data-src="data/compare_ood_instances.json" data-regime="free" data-metric="pos_rmse">
+<div class="widget-body">
+<p class="selection">Selection: Free joint-space motion, Position RMSE (rad); n = 8 cases. Mean with 95% bootstrap CI (1000 resamples); difference vs PD, shared gains (v2) is paired by case, failed cases dropped from the pair.</p>
+<table class="compare-table">
+<thead>
+<tr><th>Method</th><th class="num">Mean</th><th class="num">95% CI</th><th class="num">n</th><th class="num">Δ vs reference</th><th class="num">95% CI (paired)</th><th class="num">Pairs</th></tr>
+</thead>
+<tbody>
+<tr><td>PD, shared gains (v2)</td><td class="num">0.01836</td><td class="num">[0.01463, 0.02257]</td><td class="num">8</td><td class="num">reference</td><td class="num">—</td><td class="num">—</td></tr>
+<tr><td>PD, shared gains (v1)</td><td class="num">0.003749</td><td class="num">[0.002976, 0.004592]</td><td class="num">8</td><td class="num">-0.01461</td><td class="num">[-0.01781, -0.0113]</td><td class="num">8</td></tr>
+<tr><td>Neural torque, actor-critic, learned-model gradients</td><td class="num">0.05971</td><td class="num">[0.04832, 0.07224]</td><td class="num">8</td><td class="num">0.04135</td><td class="num">[0.02943, 0.05459]</td><td class="num">8</td></tr>
+<tr><td>PD + residual, actor-critic, learned-model gradients</td><td class="num">0.03823</td><td class="num">[0.03163, 0.04436]</td><td class="num">8</td><td class="num">0.01987</td><td class="num">[0.0135, 0.02626]</td><td class="num">8</td></tr>
+<tr><td>PD + residual, actor-critic, per-sample median clipping</td><td class="num">0.03406</td><td class="num">[0.03001, 0.03855]</td><td class="num">8</td><td class="num">0.0157</td><td class="num">[0.01066, 0.02232]</td><td class="num">8</td></tr>
+<tr><td>PD + residual, actor-critic, median clipping, rate weight 0.003</td><td class="num">0.02097</td><td class="num">[0.01763, 0.02487]</td><td class="num">8</td><td class="num">0.002614</td><td class="num">[-0.003463, 0.0094]</td><td class="num">8</td></tr>
+<tr><td>PD + residual, actor-critic, median clipping, rate weight 0.003, target history</td><td class="num">0.01599</td><td class="num">[0.01356, 0.01888]</td><td class="num">8</td><td class="num">-0.002372</td><td class="num">[-0.007054, 0.003109]</td><td class="num">8</td></tr>
+<tr><td>PD + residual, actor-critic, median clipping, rate weight 0.003, 20 mrad kernel</td><td class="num">0.01361</td><td class="num">[0.01114, 0.01659]</td><td class="num">8</td><td class="num">-0.004749</td><td class="num">[-0.01014, 0.0011]</td><td class="num">8</td></tr>
+</tbody>
+</table>
+</div>
+<figcaption>Held-out robot instances (doubled deviations): per-case values; dots are cases, the tick the mean, the bar its 95% bootstrap interval. <a class="source" href="data/compare_ood_instances.json">Data (JSON)</a></figcaption>
+</figure>
+
+<h2>Findings</h2>
+<ol>
+<li><strong>Under the corrected protocol the tuned PD is much less compliant, and tracks much worse, than the nominal-plant numbers of reports D1 and D2 said.</strong> On blocked targets its mean excess force above 30 N is 22.5 N (4.9 N on the nominal robot), its task-family peak force 123 N, and at 3 kg payload the blocked excess force is 39 N and the task peak 297 N. Its hold error is 16.7 mrad (2.5 on the nominal robot) and its free-motion error 19 mrad (7.9), because a PD with nominal gravity compensation sags under the payload.</li>
+<li><strong>A PD + residual trained by the short-horizon actor-critic through median-clipped simulator gradients, with the torque-rate weight at 0.003, is better than the tuned PD on every family composite and in every held-out group, with a single seed.</strong> With the 20 mrad kernel, in distribution: hold error 6.1 mrad against 16.7 (pulse recovery 0.23 s against 0.44), free-motion error 13.4 against 19.1 mrad, policy-like 47 against 55 mrad, step settling 0.39 against 0.66 s, all at the PD's torque rate (43 against 49 Nm/s in hold). Contact family: excess force 1.1 against 2.9 N, peak 80 against 128 N, onset impulse 2.8 against 6.2 N s. Task family: excess force 0.2 against 3.9 N, peak 37 against 123 N. At 3 kg payload (held out) free-motion error 24 against 49 mrad, task excess 1.0 against 18 N, contact peak 123 against 241 N, blocked excess 30 against 39 N; on the out-of-distribution instances and at twice the speed the same ordering holds (task peak 54 against 360 N at double speed). The compliance is not a global softening: the controller is stiffer than the PD where tracking is feasible and yields where it is not.</li>
+<li><strong>The remaining deficit is the deep blocked target, where the kernel width sets the trade-off.</strong> On blocked references (target 4 to 8 cm inside the surface) the 20 mrad arm pushes as hard as the PD (excess 23.3 against 22.5 N, peak 112 against 117 N) and recovers tracking after release in 1.3 s against 0.7; the 50 mrad arm with the same reward pushes less (16.2 N, peak 107 N) at the price of free-motion tracking (20 against 13.4 mrad), and the first-reward arm pushed least (9.7 N) because its rate penalty rewarded softness everywhere. With a narrow kernel the tracking terms saturate on a blocked target and the push comes from the weak linear restoring term and the PD base itself; the contact-force term at 0.5 above 30 N does not outweigh them. The next arms raise the force term and drop the restoring term in contact.</li>
+<li><strong>The target history halves the torque rate on policy-like targets.</strong> With the history of the position target in the observation, the policy-like torque-rate RMS is 805 against 1291 (same reward, 50 mrad kernel) and 1766 for the PD, with the best policy-like composite of all arms (1.23 against 1.81), and the step overshoot is larger (37 against 23 mrad). Its other families are between the two kernel widths. The combination of target history and the 20 mrad kernel is training.</li>
+<li><strong>Why the first-reward arms tracked loosely: the torque-rate term, not the gradients.</strong> The decomposition above shows that with the torque-rate weight at 0.03 the PD base loses more reward per step to that term than the whole position kernel is worth, and that the trained residual's gain over its initialization came almost entirely from softening it. At 0.003 the position kernel dominates and the same gradients give the controllers of finding 2.</li>
+<li><strong>Chatter and press depth.</strong> The learned arms bounce more than the PD in the contact family (0.5 to 1.1 contact breaks per episode against 0.1; 2.0 for the first-reward arm) and press 1.4 to 2.5 N short of the 30 N task target against 0.2 N for the PD; both are visible in the clips and are the next reward questions after blocked compliance.</li>
+<li><strong>Neural torque and gradient sources.</strong> Neural torque with learned-model gradients and the first reward had the softest impacts (33 N contact peak) but 37 N blocked excess and 56 mrad free-motion error after 150 contact-stage iterations; its rate-light successor is training. The rate-light neural torque with finite-difference gradients collapsed when contact entered the curriculum, like the unclipped finite-difference arms; median clipping keeps finite differences stable for the residual, and learned-model gradients were stable in every arm. The agreement study between the two gradient sources runs on the rate-light learned-model arm when it finishes.</li>
+</ol>
+
+<h2>Caveats and failures</h2>
+<ul>
+<li>Single seed per arm so far; two more seeds of the 20 mrad arm are training, and no ranking among the learned arms is claimed before they finish (ADR 0005). The effects against the PD (hold error, task peak force, payload groups) are several times the case-to-case spread; the differences among the rate-light arms are not.</li>
+<li>The three arms of the first reward stopped at iterations 349, 299 and 349 at a validation step after a code edit (ADR 0005) and are reported from their last checkpoints; their training-time validation ran on the nominal robot. The rate-light arms were restarted after the fix and selected on the corrected validation.</li>
+<li>The reference PD was tuned on the nominal robot (erratum). A PD re-tuned on the instance distribution would be a fairer tracking baseline; whether to re-tune is a decision for the advisor, because it changes the residual base of every arm.</li>
+<li>The composite v2 is the selection objective, not a research signal; the compliance claims rest on excess force, peak force and onset impulse, the tracking claims on position RMSE, recovery times and bounces.</li>
+<li>Evaluation noise: 16 cases per family in distribution, 8 in the held-out groups.</li>
+</ul>
+
+<h2>Next steps</h2>
+<ul>
+<li>Blocked-target compliance without losing tracking: the 20 mrad arm with the contact-force term at four times the weight, and the same without the linear restoring term (launch when cores free up).</li>
+<li>Seeds: two more of the 20 mrad arm (training); then the ranking.</li>
+<li>Ask the advisor whether the shared PD should be re-tuned on the instance distribution.</li>
+<li>Gradient agreement study on the rate-light learned-model arm; chatter and press depth as the following reward questions.</li>
+<li>Representation study (history windows, encodings) on the winning configuration; latency and lower network rates afterwards.</li>
+</ul>
