@@ -16,7 +16,7 @@ python research/build.py
 python -m http.server --directory research/site
 ```
 
-Serving over HTTP lets the interactive figures load their data; the pages also work from `file://` with static content. The same build runs in the GitHub Actions workflow that publishes the notebook with GitHub Pages.
+Serving over HTTP lets the interactive figures load their data; the pages also work from `file://` with static content.
 
 ## Layout
 
