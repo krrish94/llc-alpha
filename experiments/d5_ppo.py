@@ -37,7 +37,9 @@ FAMILIES = {
     "free": {"hold": 0.3, "free": 0.4, "policy": 0.15, "step": 0.15},
     # declared: the task family enters training (no longer held out) for the multi-task recipe
     "full": {"hold": 0.1, "free": 0.15, "policy": 0.1, "step": 0.1, "contact2": 0.2, "blocked": 0.2, "task": 0.15},
-    "contact_focus": {"hold": 0.15, "free": 0.2, "policy": 0.1, "contact2": 0.25, "blocked": 0.3},  # contact deep dive (ADR 0007); the task family stays held out; free-space share keeps the tracking from being forgotten
+    "contact_focus": {"hold": 0.15, "free": 0.2, "policy": 0.1, "contact2": 0.25, "blocked": 0.3},
+    # Milestone 12 (ADR 0012): every family of protocol v5, the contact-rich ones weighted 1.5 to 1
+    "consolidation": {"hold": 0.6, "free": 0.8, "policy": 0.5, "step": 0.5, "contact2": 1.0, "blocked": 1.2, "task": 0.8, "push": 0.8, "pick": 0.8, "wipe": 1.2, "erase": 1.2, "peg": 1.5, "drawer": 1.2, "door": 1.2},  # contact deep dive (ADR 0007); the task family stays held out; free-space share keeps the tracking from being forgotten
 }
 
 

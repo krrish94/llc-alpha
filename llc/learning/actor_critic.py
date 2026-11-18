@@ -17,6 +17,7 @@ import torch.nn as nn
 from llc.learning.policy import HistoryBuffer, Policy, OutputFilter, preview_indices
 from llc.learning.rollout_mj import _clip_hook
 from llc.sim.panda import NUM_JOINTS
+from llc.sim.plant import PLANT
 
 
 @dataclass
@@ -29,7 +30,7 @@ class RewardConfig:
     w_rate: float = 0.03
     rate_scale: float = 500.0  # Nm/s
     w_force: float = 0.5
-    force_soft: float = 30.0  # N
+    force_soft: float = 2.0 * PLANT.force_cap  # N (30 on the Panda)
     force_scale: float = 20.0  # N
     w_impulse: float = 0.02
     impulse_scale: float = 2000.0  # N/s
@@ -46,8 +47,8 @@ class RewardConfig:
     w_press: float = 0.0
     press_sigma: float = 5.0  # N
     press_stiffness: float = 500.0  # N/m: 1 cm of commanded depth asks for 5 N above press_min (ADR 0008: the oracle's spring; 1000 in ADR 0007)
-    press_min: float = 5.0  # N
-    force_cap: float = 15.0  # N
+    press_min: float = PLANT.press_min  # N
+    force_cap: float = PLANT.force_cap  # N
     w_feas: float = 1.0
     feas_sigma: float = 0.01  # m
     # Force terms on a first-order low-pass of the contact force (seconds; 0 = instantaneous, D3): a

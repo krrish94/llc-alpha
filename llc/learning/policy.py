@@ -76,14 +76,24 @@ class PolicyConfig:
     # inverse-dynamics feedforward of the reference, M(q) qdd_ref + C(q, qd_ref) qd_ref + g(q), instead of
     # gravity alone; the fast loop's base term is supplied by the caller (nominal model or torch model).
     feedforward: bool = False
+    # Milestone 12 (ADR 0012): what the student knows about its own deployment, appended to the observation: the base PD's
+    # stiffness and damping multipliers (log-scaled, per joint) and its compute latency (per 10 ms). The payload is unknown.
+    base_scale_input: bool = False
+    latency_input: bool = False
+    # Residual trunk: Linear + ELU, then ``layers - 1`` blocks of LayerNorm, Linear, ELU with a skip (deep trunks train from the warm start).
+    residual_blocks: bool = False
 
     @property
     def n_hist(self) -> int:
         return self.history + self.history_dense
 
     @property
+    def extra_dim(self) -> int:
+        return 2 * NUM_JOINTS * int(self.base_scale_input) + int(self.latency_input)
+
+    @property
     def raw_dim(self) -> int:
-        return 4 * NUM_JOINTS + self.n_hist * (3 + int(self.ref_history) + int(self.ext_torque)) * NUM_JOINTS + self.preview * NUM_JOINTS
+        return 4 * NUM_JOINTS + self.n_hist * (3 + int(self.ref_history) + int(self.ext_torque)) * NUM_JOINTS + self.preview * NUM_JOINTS + self.extra_dim
 
     @property
     def obs_dim(self) -> int:
@@ -114,6 +124,25 @@ def encode_obs(q, qd, q_ref, qd_ref, hist_q, hist_qd, hist_tau, limits, hist_ref
     return torch.cat(obs, dim=-1)
 
 
+def encode_extras(cfg: PolicyConfig, kp_scale, kd_scale, latency_s: float) -> torch.Tensor:
+    """The deployment inputs of ADR 0012 as a (1, extra_dim) tensor: log stiffness scale per log 3, log damping scale per log 2, latency per 10 ms."""
+    parts = []
+    if cfg.base_scale_input:
+        parts += [torch.log(torch.as_tensor(np.asarray(kp_scale, np.float32))) / float(np.log(3.0)), torch.log(torch.as_tensor(np.asarray(kd_scale, np.float32))) / float(np.log(2.0))]
+    if cfg.latency_input:
+        parts.append(torch.tensor([latency_s / 0.01], dtype=torch.float32))
+    return torch.cat(parts)[None] if parts else torch.zeros(1, 0)
+
+
+class ResBlock(nn.Module):
+    def __init__(self, hidden: int):
+        super().__init__()
+        self.norm, self.lin, self.act = nn.LayerNorm(hidden), nn.Linear(hidden, hidden), nn.ELU()
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return x + self.act(self.lin(self.norm(x)))
+
+
 def preview_indices(cfg: PolicyConfig, k: int, T: int) -> np.ndarray:
     """Reference indices of the target preview at step ``k`` of a reference of ``T`` steps (held at the end)."""
     return np.minimum(k + cfg.preview_stride * np.arange(1, cfg.preview + 1), T - 1)
@@ -131,11 +160,14 @@ class Policy(nn.Module):
         if cfg.encoding == "fourier":
             g = torch.Generator().manual_seed(0)
             self.register_buffer("fourier_B", torch.randn(cfg.raw_dim, cfg.fourier_features, generator=g) * 2.0)
-        dims = [cfg.obs_dim] + [cfg.hidden] * cfg.layers
-        layers: list[nn.Module] = []
-        for a, b in zip(dims[:-1], dims[1:]):
-            layers += [nn.Linear(a, b), nn.ELU()]
-        self.trunk = nn.Sequential(*layers)
+        if cfg.residual_blocks:
+            self.trunk = nn.Sequential(nn.Linear(cfg.obs_dim, cfg.hidden), nn.ELU(), *[ResBlock(cfg.hidden) for _ in range(cfg.layers - 1)])
+        else:
+            dims = [cfg.obs_dim] + [cfg.hidden] * cfg.layers
+            layers: list[nn.Module] = []
+            for a, b in zip(dims[:-1], dims[1:]):
+                layers += [nn.Linear(a, b), nn.ELU()]
+            self.trunk = nn.Sequential(*layers)
         self.head = nn.Linear(cfg.hidden, cfg.out_dim)
         nn.init.zeros_(self.head.bias)
         nn.init.normal_(self.head.weight, std=1e-3)  # start neutral: initial gains / zero residual / zero torque
@@ -176,15 +208,18 @@ class Policy(nn.Module):
             return {"kp_scale": kp_scale, "kd_scale": kd_scale, "residual": cfg.residual_fraction * self.limits * torch.tanh(out[..., 2 * n:])}
         return {"torque": self.limits * torch.tanh(out)}
 
-    def fast_torque(self, held: dict[str, torch.Tensor], q, qd, q_ref, qd_ref, gravity) -> torch.Tensor:
-        """Torque at a physics step from the held network output (torch, batched)."""
+    def fast_torque(self, held: dict[str, torch.Tensor], q, qd, q_ref, qd_ref, gravity, kp_scale=None, kd_scale=None) -> torch.Tensor:
+        """Torque at a physics step from the held network output (torch, batched). ``kp_scale``, ``kd_scale`` (B, 7) are the
+        episode's base-gain multipliers (ADR 0012): the fast loop ran at the scaled gains, so the regression must too."""
         kind = self.cfg.kind
+        kp = self.kp_shared if kp_scale is None else self.kp_shared * kp_scale
+        kd = self.kd_shared if kd_scale is None else self.kd_shared * kd_scale
         if kind == "learned_gains":
             return held["kp"] * (q_ref - q) + held["kd"] * (qd_ref - qd) + gravity
         if kind == "pd_residual":
-            return self.kp_shared * (q_ref - q) + self.kd_shared * (qd_ref - qd) + gravity + held["residual"]
+            return kp * (q_ref - q) + kd * (qd_ref - qd) + gravity + held["residual"]
         if kind == "pd_gain_residual":
-            return held["kp_scale"] * self.kp_shared * (q_ref - q) + held["kd_scale"] * self.kd_shared * (qd_ref - qd) + gravity + held["residual"]
+            return held["kp_scale"] * kp * (q_ref - q) + held["kd_scale"] * kd * (qd_ref - qd) + gravity + held["residual"]
         return held["torque"]
 
     def neutral_output(self, batch: int) -> dict[str, torch.Tensor]:
@@ -250,14 +285,19 @@ class HistoryBuffer:
     def windows(self) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         return self.q[:, self._idx], self.qd[:, self._idx], self.tau[:, self._idx]
 
-    def observation(self, q, qd, q_ref, qd_ref, limits, ref_future=None) -> torch.Tensor:
+    def observation(self, q, qd, q_ref, qd_ref, limits, ref_future=None, extras: torch.Tensor | None = None) -> torch.Tensor:
         """Policy observation from the current quantities and the buffered windows (after push);
-        ``ref_future`` (B, preview, 7) is required by preview policies."""
+        ``ref_future`` (B, preview, 7) is required by preview policies; ``extras`` (1 or B, extra_dim) by the
+        policies with deployment inputs (ADR 0012)."""
         hq, hqd, htau = self.windows()
         href = self.ref[:, self._idx] if self.cfg.ref_history else None
         hext = self.ext[:, self._idx] if self.ext is not None else None
         assert (ref_future is not None) == (self.cfg.preview > 0), "preview policies need the future targets at every observation"
-        return encode_obs(q, qd, q_ref, qd_ref, hq, hqd, htau, limits, href, hext, ref_future)
+        obs = encode_obs(q, qd, q_ref, qd_ref, hq, hqd, htau, limits, href, hext, ref_future)
+        if self.cfg.extra_dim > 0:
+            assert extras is not None and extras.shape[-1] == self.cfg.extra_dim, "policies with deployment inputs need them at every observation"
+            obs = torch.cat([obs, extras.expand(obs.shape[0], -1)], dim=-1)
+        return obs
 
 
 class OutputFilter:
@@ -305,6 +345,20 @@ def expand_preview(policy: "Policy", preview: int, preview_stride: int = 10) -> 
     cfg = policy.cfg
     assert cfg.preview == 0 and cfg.encoding == "raw", "expansion is defined for raw-encoded policies without a preview"
     new = Policy(replace(cfg, preview=preview, preview_stride=preview_stride))
+    state = {k: v for k, v in policy.state_dict().items() if k != "trunk.0.weight"}
+    new.load_state_dict(state, strict=False)
+    with torch.no_grad():
+        new.trunk[0].weight.zero_()
+        new.trunk[0].weight[:, : cfg.obs_dim] = policy.trunk[0].weight
+    return new.eval()
+
+
+def expand_inputs(policy: "Policy", base_scale_input: bool = True, latency_input: bool = True) -> "Policy":
+    """The same policy with the deployment inputs of ADR 0012 appended to its observation (new last input columns at zero:
+    the warm start is reproduced exactly until training uses them)."""
+    cfg = policy.cfg
+    assert cfg.extra_dim == 0 and cfg.encoding == "raw", "expansion is defined for raw-encoded policies without deployment inputs"
+    new = Policy(replace(cfg, base_scale_input=base_scale_input, latency_input=latency_input))
     state = {k: v for k, v in policy.state_dict().items() if k != "trunk.0.weight"}
     new.load_state_dict(state, strict=False)
     with torch.no_grad():

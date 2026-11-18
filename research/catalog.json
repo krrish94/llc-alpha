@@ -148,6 +148,46 @@
       "milestone": null,
       "status": "handoff (standalone executive summary)",
       "finding": "One learned controller, a residual-plus-gain-multiplier network on a 1 kHz PD law with the nominal inverse-dynamics feedforward, trained by backpropagation through the plant on free space and then by imitation of two privileged teachers, is competitive or better than the best classical controller on 28 of 33 pre-registered rows on the Panda with a Robotiq 2F-85; of three parameterisations by three learning routes, only the residual form trained by plant gradients and finished by imitation earned a place. The page maps the hypothesis space, the mechanisms behind what worked and what did not, the gaps (policy-like smoothness, the press band against the cap, privileged labels, three seeds and sixteen cases), and what to revisit when scaling to more data and compute."
+    },
+    {
+      "id": "19-m11-interfaces",
+      "title": "Milestone 11, Phase 1 and 2: the interface ablation on the Panda, the torque-tracking family, the pick with a grasp, the learned interface and the probes",
+      "date": "2026-11-17",
+      "milestone": 11,
+      "status": "complete",
+      "finding": "Through the model-based interface of each profile the classical set keeps its tracking (hold 8.1 to 8.2 mrad, free motion 4.9 to 6.4) and its contact behaviour (press-and-slide 9 N above the cap, blocked 23 N, realised stiffness within 3% of the torque interface) on every profile, and loses smoothness: the torque rate grows from 115 Nm/s to 587, 1074 and 1710 in free motion because the servo acts on its own quantised velocity feedback, so the cap composites miss the pre-registered 10% bound on free motion through that term alone. The torque-tracking family puts the realised torque within 0.4 to 1.3% of stall at P1, 2.0 to 2.8% at P2 and P3, with delays of 1 to 10 ms and chirp bandwidths from above 100 Hz down to 10 Hz; the host period matters beyond 20 ms, the bus delay hardly up to 10 ms. The learned interface finds nothing below the model-based floor (criterion i not met): with the reference advanced to the middle of the hold, every constant correction raises the error, and what remains is the servo's own loop between frames. The pick with a grasp separates controllers by their pre-grasp behaviour: the feedforward PD misses every 2 kg-payload grasp (it sags 10 to 19 mm), the two-teacher student takes them and misses four of five payload-free cases by yielding to a 6 to 9 N brush against the block. Linear probes of the two-layer student decode contact (0.77 to 0.80) and nothing else above chance. Continuation (amendment 3): the PD re-tuned through each profile halves its stiffness and the blocked excess and trades free-motion accuracy for it; a filtered velocity estimate changes the torque rate by a tenth at most, so the smoothness cost is the held setpoint's staircase on a quantisation floor, the interface's own."
+    },
+    {
+      "id": "20-m11-yam",
+      "title": "Milestone 11, Phase 3: the YAM through its native interface",
+      "date": "2026-11-17",
+      "milestone": 11,
+      "status": "complete",
+      "finding": "On the i2rt YAM through its native 250 Hz impedance interface, the shipped gains are a teleoperation setting (75 mrad in free motion, 15 N above the 12 N cap on blocked targets, one grasp in five) and the CMA-ES re-tune through the interface halves the tracking error and brings the press into the band; a host-rate two-teacher student distilled from scratch through the interface (four layers of 256, one seed, best at its third iteration) meets the across-the-board criterion on 32 of 33 rows: hold 4 against 14 mrad, free motion at parity, blocked targets 5.1 against 9.5 N above the cap, every block grasped against 9 of 16, with the blocked family on the 500 N/m surface as its one miss and a higher torque rate everywhere. Under a DC-motor layer with its unknowns randomised per case the student keeps all 16 evaluated rows; the extended probes decode the reference's depth, sliding and the blocked phase from its trunk."
+    },
+    {
+      "id": "21-m11-students",
+      "title": "Milestone 11, Phase 2b: host-rate students through the interface profiles",
+      "date": "2026-11-17",
+      "milestone": 11,
+      "status": "complete (erratum 2026-11-17; continuation of amendment 3 added)",
+      "finding": "Host-rate two-teacher students distilled from scratch through the MIT-mode, Dynamixel-like and Feetech-like profiles on the Panda (four layers of 256, one seed each, decisions at every host frame) meet 25, 24 and 26 of 33 rows against the torque-interface classical set through the same profile, and 21, 22 and 18 once the PD re-tuned through the profile joins it: they win hold (1.3 to 1.5 against 8.2 mrad), steps, the task family and the pick (14 to 16 of 16 grasps against 7), keep free motion within 3 to 7%, and miss the blocked family and the fast free-space families through their torque rate. Erratum: no collection episode diverged (a flag artefact). The blocked miss is the impact transient under payload, not the label fit; contact-weighted labels and a force-space label term do not help, keeping the teacher driving half the episodes for three more iterations takes the blocked family in two of three seeds (23 of 33 rows pooled). The deeper trunks decode contact at 0.84 to 0.94, the reference's depth inside the surface at R² 0.75 to 0.82 and the blocked phase at 0.9, and not the payload."
+    },
+    {
+      "id": "22-checkpoint-3",
+      "title": "Checkpoint 3: the learned controller on position-controlled arms",
+      "date": "2026-11-17",
+      "milestone": 11,
+      "status": "checkpoint (standalone summary)",
+      "finding": "Standalone summary of Milestone 11: the servo profiles and the model-based interface, the interface ablation on the Panda, the learned interface at the servo's floor, host-rate students through the profiles, the YAM student at 32 of 33 rows through its own interface and under a randomised DC-motor layer, the blocked family at the host rate diagnosed to the impact transient under payload, the probing study, and the corrections made."
+    },
+    {
+      "id": "23-m12-consolidation",
+      "title": "Milestone 12: consolidation on the torque-interface Panda",
+      "date": "2026-11-18",
+      "milestone": 12,
+      "status": "in progress (runs launched 2026-11-18)",
+      "finding": "In progress: the two-phase student at 4 and 10 layers on ten times the data under the v5 plant distribution, against the global and the per-family PD, on fourteen families including wiping, erasing, peg-in-hole, a drawer and a door."
     }
   ]
 }

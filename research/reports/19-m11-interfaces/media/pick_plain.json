@@ -1,0 +1,57 @@
+{
+  "path": "research/reports/19-m11-interfaces/media/pick_plain.mp4",
+  "record": "research/reports/19-m11-interfaces/media/pick_plain.json",
+  "frames": 570,
+  "fps": 50,
+  "speed": 1.0,
+  "duration_s": 11.4,
+  "width": 1024,
+  "height": 750,
+  "resolution": [
+    1024,
+    750
+  ],
+  "view_size": [
+    480,
+    360
+  ],
+  "camera": "detail",
+  "title": "Pick with a grasp, no payload, case pick-test-001",
+  "plot_series": [
+    "pos_err",
+    "f_object",
+    "tau2"
+  ],
+  "t_start": 0.0,
+  "t_end": 11.38,
+  "sample_step": 20,
+  "sample_rate_hz": 1000.0,
+  "posters": {
+    "first": "research/reports/19-m11-interfaces/media/pick_plain-first.png",
+    "middle": "research/reports/19-m11-interfaces/media/pick_plain-middle.png",
+    "last": "research/reports/19-m11-interfaces/media/pick_plain-last.png"
+  },
+  "episodes": [
+    {
+      "method": "pd_feedforward",
+      "label": "PD, tracking-tuned, with feedforward",
+      "npz": "runs/m11/episodes_clips/pick-test-001__pd_feedforward.npz",
+      "sha256": "c45ef5bbd54987a11e52e3eed430aea6975cfcc70420ffd847ac4bbca6872c78",
+      "joint_rmse_mrad": 1.9024421200020458,
+      "peak_normal_force_n": 0.0
+    },
+    {
+      "method": "distill_two",
+      "label": "Two-teacher student (seed 0)",
+      "npz": "runs/m11/episodes_clips/pick-test-001__student.npz",
+      "sha256": "0b49d4cd890561ab56dc135f4b2f092c1f96e4df22b81546e02b6d3969d991bb",
+      "joint_rmse_mrad": 6.640598047534715,
+      "peak_normal_force_n": 0.0
+    }
+  ],
+  "reference": "gray sphere: commanded tool position, q_ref through llc.sim.nominal.NominalModel",
+  "trace": "measured tool path over the last 0.5 s, gray (old) to method color (new)",
+  "metrics": "joint RMSE over all joints and samples from t = 0 to the displayed time (mrad); peak normal force so far (N)",
+  "scene": "llc/sim/assets/panda_2f85_0450_task_pick.xml",
+  "render_seconds": 10.16
+}

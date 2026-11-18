@@ -16,12 +16,12 @@ import numpy as np
 
 from llc.sim.plant import PLANT
 
-SCENE_PATH = PLANT.scene  # ADR 0009: LLC_PLANT selects the sphere-tool plant (v2) or the gripper plant (v3)
-NUM_JOINTS = 7
-TORQUE_LIMITS = np.array([87.0, 87.0, 87.0, 87.0, 12.0, 12.0, 12.0])
-VELOCITY_LIMITS = np.array([2.175, 2.175, 2.175, 2.175, 2.61, 2.61, 2.61])  # rad/s, Franka datasheet
-HOME = np.array([0.0, 0.0, 0.0, -1.57079, 0.0, 1.57079, -0.7853])
-ENV_GEOMS = ("floor", "table", "wall")
+SCENE_PATH = PLANT.scene  # ADR 0009: LLC_PLANT selects the sphere-tool plant (v2), the gripper plant (v3) or another robot (ADR 0011)
+NUM_JOINTS = PLANT.n_joints  # the selected robot's constants under their historical names (ADR 0011): 7 joints, 87/12 Nm, Franka datasheet velocities on the Panda
+TORQUE_LIMITS = np.array(PLANT.torque_limits)
+VELOCITY_LIMITS = np.array(PLANT.velocity_limits)
+HOME = np.array(PLANT.home)
+ENV_GEOMS = PLANT.env_geoms
 TOOL_GEOMS = PLANT.tool_geoms
 
 
@@ -57,16 +57,20 @@ class DynamicsPerturbation:
     obs_noise_qd: float = 0.0  # rad/s, std of velocity measurement noise
     # Robot-instance deviations (one entry per moving body link1..link7 and the tool, 8 entries),
     # modelling an imperfectly identified robot; all ones / zeros = nominal.
-    link_mass_scale: tuple[float, ...] = (1.0,) * 8
-    link_inertia_scale: tuple[float, ...] = (1.0,) * 8
-    link_com_offset: tuple[tuple[float, float, float], ...] = ((0.0, 0.0, 0.0),) * 8  # m, body frame
-    joint_damping_scale: tuple[float, ...] = (1.0,) * 7
-    joint_armature_scale: tuple[float, ...] = (1.0,) * 7
-    torque_scale: tuple[float, ...] = (1.0,) * 7  # actuator gain error: applied torque = scale * command
+    link_mass_scale: tuple[float, ...] = (1.0,) * PLANT.moving_bodies
+    link_inertia_scale: tuple[float, ...] = (1.0,) * PLANT.moving_bodies
+    link_com_offset: tuple[tuple[float, float, float], ...] = ((0.0, 0.0, 0.0),) * PLANT.moving_bodies  # m, body frame
+    joint_damping_scale: tuple[float, ...] = (1.0,) * PLANT.n_joints
+    joint_armature_scale: tuple[float, ...] = (1.0,) * PLANT.n_joints
+    torque_scale: tuple[float, ...] = (1.0,) * PLANT.n_joints  # actuator gain error: applied torque = scale * command
     # MuJoCo direct solref (-stiffness, -damping) of the table and wall geoms; (0, 0) keeps the scene's
     # (about 20 kN/m direct, 60 kN/m effective). Compliant-surface groups of ADR 0008.
     surface_solref: tuple[float, float] = (0.0, 0.0)
     surface_solimp: tuple[float, float, float] = (0.0, 0.0, 0.0)  # with surface_solref: (d0, d_width, width) of the surface geoms; zeros keep the scene's
+    # Milestone 12 (ADR 0012): the consolidation distribution's extra unknowns
+    actuation_lag: float = 0.0  # s, first-order lag of the applied torque after the transport delay (0 = none)
+    surface_friction: float = 0.0  # sliding friction of the floor, table and wall geoms (0 = the scene's)
+    object_mass_scale: float = 1.0  # multiplies the mass and inertia of every task object (bodies jointed after the arm)
 
     def is_nominal(self) -> bool:
         return self == DynamicsPerturbation()
@@ -81,6 +85,14 @@ class ContactState:
     f_object: float = 0.0  # N, total normal force between the tool and task objects (Milestone 9 task scenes)
     n_object_contacts: int = 0
     f_object_env: float = 0.0  # N, total normal force between task objects and the environment (a placed block on the table)
+
+
+def _in_subtree(m: mujoco.MjModel, b: int, root: int) -> bool:
+    while b > 0:
+        if b == root:
+            return True
+        b = int(m.body_parentid[b])
+    return b == root
 
 
 def _quat_from_matrix(r: np.ndarray) -> np.ndarray:
@@ -106,19 +118,25 @@ class PandaSim:
         self.touch_sensor = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_SENSOR, "tool_touch")
         self.env_geom_ids = {mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_GEOM, g) for g in ENV_GEOMS}
         self.tool_geom_ids = {mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_GEOM, g) for g in TOOL_GEOMS}
-        robot_bodies = set(range(self.tool_body - NUM_JOINTS, self.tool_body + 1)) | {self.tool_body - NUM_JOINTS - 1}  # link0..link7, tool
+        base = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_BODY, PLANT.base_link)
+        robot_bodies = {b for b in range(m.nbody) if _in_subtree(m, b, base)}  # the base link and everything below it (link0..link7 and the tool on the Panda)
         self.robot_geom_ids = {g for g in range(m.ngeom) if int(m.geom_bodyid[g]) in robot_bodies}
-        self.object_geom_ids = {g for g in range(m.ngeom) if int(m.geom_bodyid[g]) not in robot_bodies and int(m.geom_bodyid[g]) != 0}
+        static = {b for b in range(1, m.nbody) if b not in robot_bodies and m.body_jntnum[b] == 0 and m.body_dofnum[b] == 0}  # fixtures (ADR 0012): environment
+        self.env_geom_ids |= {g for g in range(m.ngeom) if int(m.geom_bodyid[g]) in static}
+        self.object_geom_ids = {g for g in range(m.ngeom) if int(m.geom_bodyid[g]) not in robot_bodies and int(m.geom_bodyid[g]) != 0 and int(m.geom_bodyid[g]) not in static}
         self._apply_perturbation(self.perturbation)
         self._delay_steps = int(round(self.perturbation.actuation_delay / self.dt))
         self._delay_buffer: deque[np.ndarray] = deque()
+        lag = float(self.perturbation.actuation_lag)
+        self._lag_alpha = self.dt / (lag + self.dt) if lag > 0.0 else 1.0  # ADR 0012: first-order actuator lag after the delay
+        self._tau_lag = np.zeros(NUM_JOINTS)
         self._f6 = np.zeros(6)
         self.reset(HOME)
 
     # ------------------------------------------------------------------ setup
     def _apply_perturbation(self, p: DynamicsPerturbation) -> None:
         m = self.model
-        moving = list(range(self.tool_body - 7, self.tool_body + 1))  # link1..link7, tool
+        moving = [b for b in range(1, m.nbody) if m.body_jntnum[b] == 1 and m.jnt_type[m.body_jntadr[b]] == mujoco.mjtJoint.mjJNT_HINGE][:NUM_JOINTS] + [self.tool_body]  # the jointed links and the tool
         for i, b in enumerate(moving):
             m.body_mass[b] *= p.link_mass_scale[i]
             m.body_inertia[b] *= p.link_inertia_scale[i] * p.link_mass_scale[i]
@@ -138,6 +156,16 @@ class PandaSim:
                 if tuple(p.surface_solimp) != (0.0, 0.0, 0.0):
                     m.geom_solimp[gid, :3] = p.surface_solimp
                 m.geom_priority[gid] = 2  # above the gripper pads' priority 1 (plant v3) and the sphere's 0
+        if p.surface_friction > 0.0:  # ADR 0012: the environment's sliding friction
+            for name in ("floor", "table", "wall"):
+                gid = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_GEOM, name)
+                if gid >= 0:
+                    m.geom_friction[gid, 0] = p.surface_friction
+        if p.object_mass_scale != 1.0:  # ADR 0012: task objects (bodies jointed after the arm's degrees of freedom)
+            for b in range(1, m.nbody):
+                if m.body_jntnum[b] > 0 and m.body_dofadr[b] >= NUM_JOINTS:
+                    m.body_mass[b] *= p.object_mass_scale
+                    m.body_inertia[b] *= p.object_mass_scale
         mujoco.mj_setConst(m, self.data)
 
     def _add_point_mass(self, body: int, mass: float, offset: np.ndarray) -> None:
@@ -174,6 +202,7 @@ class PandaSim:
         self._delay_buffer.clear()
         for _ in range(self._delay_steps):
             self._delay_buffer.append(np.zeros(NUM_JOINTS))
+        self._tau_lag = np.zeros(NUM_JOINTS)
 
     @property
     def q(self) -> np.ndarray:
@@ -193,6 +222,39 @@ class PandaSim:
         self.data.qpos[adr + 3:adr + 7] = quat
         self.data.qvel[vadr:vadr + 6] = 0.0
         mujoco.mj_forward(self.model, self.data)
+
+    def set_object_base(self, body: str, pos, quat=(1.0, 0.0, 0.0, 0.0)) -> None:
+        """Move a jointed object's or a fixture's base frame (ADR 0012: the case places the drawer, the door, the peg's fixture)."""
+        bid = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, body)
+        self.model.body_pos[bid] = pos
+        self.model.body_quat[bid] = quat
+        mujoco.mj_forward(self.model, self.data)
+
+    def set_object_joint(self, body: str, q0: float) -> None:
+        """Set a one-joint object's joint position at rest (the drawer's opening, the door's angle)."""
+        bid = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, body)
+        jid = int(self.model.body_jntadr[bid])
+        self.data.qpos[int(self.model.jnt_qposadr[jid])] = q0
+        self.data.qvel[int(self.model.jnt_dofadr[jid])] = 0.0
+        mujoco.mj_forward(self.model, self.data)
+
+    def try_grasp(self, eq: int, body: str, tol_lateral: float, tol_height: float) -> bool:
+        """Activate the weld ``eq`` between the tool and ``body`` at their current relative pose if the body's centre is
+        within ``tol_lateral`` of the tool point in the tool's plane and within ``tol_height`` along the tool axis
+        (protocol v4: the grasp succeeds only if the block is inside the fingertip gap). Returns the outcome."""
+        bid = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, body)
+        r_tool = self.data.xmat[self.tool_body].reshape(3, 3)
+        d = r_tool.T @ (self.data.xpos[bid] - self.data.site_xpos[self.tool_site])
+        if np.hypot(d[0], d[1]) > tol_lateral or abs(d[2]) > tol_height:
+            return False
+        rel_pos = r_tool.T @ (self.data.xpos[bid] - self.data.xpos[self.tool_body])
+        q_inv, rel_quat = np.zeros(4), np.zeros(4)
+        mujoco.mju_negQuat(q_inv, self.data.xquat[self.tool_body])
+        mujoco.mju_mulQuat(rel_quat, q_inv, self.data.xquat[bid])
+        self.model.eq_data[eq, 3:6] = rel_pos  # the object's pose in the tool body's frame: nothing snaps at activation
+        self.model.eq_data[eq, 6:10] = rel_quat
+        self.data.eq_active[eq] = 1
+        return True
 
     def object_pose(self, body: str) -> tuple[np.ndarray, np.ndarray]:
         bid = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, body)
@@ -234,6 +296,9 @@ class PandaSim:
         if self._delay_steps:
             self._delay_buffer.append(tau)
             tau = self._delay_buffer.popleft()
+        if self._lag_alpha < 1.0:
+            self._tau_lag = self._tau_lag + self._lag_alpha * (tau - self._tau_lag)
+            tau = self._tau_lag.copy()
         self.data.ctrl[:] = tau
         mujoco.mj_step(self.model, self.data)
         return tau

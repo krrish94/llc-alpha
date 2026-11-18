@@ -18,7 +18,7 @@ import torch.nn as nn
 
 from llc.dynamics.rigid_body import RigidBodyModel
 from llc.learning.rollout import DynamicsInterface
-from llc.sim.panda import TORQUE_LIMITS, load_model
+from llc.sim.panda import NUM_JOINTS, TORQUE_LIMITS, load_model
 
 
 @dataclass
@@ -28,10 +28,10 @@ class LearnedModelConfig:
     layers: int = 3
     dt: float = 0.0025
     # normalization (set from data)
-    q_mean: tuple = (0.0,) * 7
-    q_std: tuple = (1.0,) * 7
-    qd_std: tuple = (1.0,) * 7
-    qdd_std: tuple = (1.0,) * 7
+    q_mean: tuple = (0.0,) * NUM_JOINTS
+    q_std: tuple = (1.0,) * NUM_JOINTS
+    qd_std: tuple = (1.0,) * NUM_JOINTS
+    qdd_std: tuple = (1.0,) * NUM_JOINTS
     f_scale: float = 50.0
 
 
@@ -44,7 +44,7 @@ class LearnedDynamicsNet(nn.Module):
         for a, b in zip(dims[:-1], dims[1:]):
             layers += [nn.Linear(a, b), nn.SiLU()]
         self.trunk = nn.Sequential(*layers)
-        self.head_qdd = nn.Linear(cfg.hidden, 7)
+        self.head_qdd = nn.Linear(cfg.hidden, NUM_JOINTS)
         self.head_f = nn.Linear(cfg.hidden, 1)
         nn.init.zeros_(self.head_qdd.weight); nn.init.zeros_(self.head_qdd.bias)
         for name in ("q_mean", "q_std", "qd_std", "qdd_std"):

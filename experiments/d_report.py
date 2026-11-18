@@ -25,14 +25,26 @@ REGIME_LABELS = {"hold": "Hold", "free": "Free joint-space motion", "policy": "P
 GROUP_LABELS = {"in_distribution": "In-distribution families", "heldout_workspace": "Held-out workspace (base yaw 1.2 to 2.6 rad)",
                 "speed_x1.5": "Speed x1.5", "speed_x2": "Speed x2", "payload_3kg": "Payload 3 kg", "ood_instances": "Held-out robot instances (doubled deviations)",
                 "surface_2000": "Compliant surface, 2 kN/m (held out)", "surface_500": "Compliant surface, 500 N/m (held out)", "tasks": "Task families (box pushing, pick-and-place)", "latency_5ms": "In-distribution families with a 5 ms compute latency (learned controllers)"}
-REGIME_LABELS.setdefault("push", "Box pushing"); REGIME_LABELS.setdefault("pick", "Pick-and-place")
+REGIME_LABELS.setdefault("push", "Box pushing"); REGIME_LABELS.setdefault("pick", "Pick-and-place"); REGIME_LABELS.setdefault("torque", "Torque tracking")
+for _k, _v in (("wipe", "Wiping (raster under the force band)"), ("erase", "Erasing with a held block"), ("peg", "Peg-in-hole with a chamfer"), ("drawer", "Drawer pushed closed"), ("door", "Door pushed closed")):
+    REGIME_LABELS.setdefault(_k, _v)
+from llc.sim.plant import PLANT  # noqa: E402
+
+GROUP_LABELS.setdefault(f"payload_{PLANT.payload_heavy:g}kg", f"Payload {PLANT.payload_heavy:g} kg (held out)")  # the plant's heavy-payload group (ADR 0011)
+GROUP_LABELS.setdefault("torque_tracking", "Torque-tracking family (the interface alone)")
 PRIMARY = {"hold": ["pos_rmse", "pulse_deflection", "torque_rate_rms"], "free": ["pos_rmse", "torque_rate_rms"], "policy": ["pos_rmse", "torque_rate_rms"],
            "step": ["pos_rmse", "settle_time", "overshoot"],
            "contact2": ["excess_force", "excess_force_cap", "f_peak", "f_peak_20ms", "feasible_tracking", "press_deficit", "contact_breaks", "contact_loss_rate", "contact_impedance"],
            "blocked": ["excess_force", "excess_force_cap", "f_peak", "f_peak_20ms", "blocked_drift", "blocked_motion", "apparent_stiffness", "contact_impedance", "contact_recovery", "feasible_tracking"],
            "task": ["excess_force", "excess_force_cap", "f_peak", "f_peak_20ms", "feasible_tracking", "press_deficit", "contact_loss_rate"],
            "push": ["task_success", "push_error", "push_lateral", "push_yaw", "object_force_peak_20ms", "excess_force_cap", "torque_rate_rms"],
-           "pick": ["task_success", "place_error", "place_tilt", "place_force_peak_20ms", "lift_rmse", "torque_rate_rms"]}
+           "pick": ["task_success", "grasp_success", "pregrasp_disturbance", "grasp_force_peak_20ms", "place_error", "place_tilt", "place_force_peak_20ms", "lift_rmse", "torque_rate_rms"],
+           "wipe": ["excess_force_cap", "f_peak_20ms", "press_deficit", "contact_loss_rate", "tangential_rmse", "torque_rate_rms"],
+           "erase": ["excess_force_cap", "f_peak_20ms", "press_deficit", "contact_loss_rate", "tangential_rmse", "torque_rate_rms"],
+           "peg": ["task_success", "insertion_depth", "depth_deficit", "excess_force_cap", "f_peak_20ms", "torque_rate_rms"],
+           "drawer": ["task_success", "travel", "excess_force_cap", "f_peak_20ms", "contact_loss_rate", "torque_rate_rms"],
+           "door": ["task_success", "travel", "excess_force_cap", "f_peak_20ms", "contact_loss_rate", "torque_rate_rms"],
+           "torque": ["tau_track_rmse", "tau_track_delay", "tau_track_bandwidth", "saturation", "torque_rate_rms"]}
 
 
 def pooled(results: dict, learned: dict) -> tuple[dict, dict]:
@@ -43,6 +55,9 @@ def pooled(results: dict, learned: dict) -> tuple[dict, dict]:
         groups.setdefault(key, []).append(name)
     out = {k: v for k, v in results.items() if k not in learned}
     for key, names in groups.items():
+        names = [nm for nm in names if nm in results]  # a group evaluated without the learned runs (the torque-tracking family, ADR 0011)
+        if not names:
+            continue
         n = len(results[names[0]])
         out[key] = []
         for i in range(n):
@@ -53,12 +68,14 @@ def pooled(results: dict, learned: dict) -> tuple[dict, dict]:
     return out, groups
 
 
-CLASSICAL_KEYS = ("pd_shared", "pd_shared_cap", "pd_feedforward", "pd_shared_cap_feedforward", "pd_shared_v2gains", "pd_shared_v1")
+CLASSICAL_KEYS = ("pd_shared", "pd_shared_cap", "pd_feedforward", "pd_shared_cap_feedforward", "pd_shared_v2gains", "pd_shared_v1", "pd_shipped", "pd_shipped_feedforward", "pd_retuned")  # the shipped gains of a robot's driver and the PD re-tuned through a profile count as classical (ADR 0011); the per-family PD (pd_family, ADR 0012) is a separate reference
 
 
 def add_best_classical(results: dict, objective: str = "composite_cap", keys=CLASSICAL_KEYS) -> dict:
     """Adds the synthetic method ``best_classical``: per regime, the per-case rows of the classical controller
     with the lowest mean ``objective`` over the regime's cases (ADR 0010: the reference of every comparison)."""
+    if "best_classical" in results:  # chosen once; a caller that picked the candidates keeps its choice
+        return results
     present = [k for k in keys if k in results]
     if not present:
         return results
@@ -73,7 +90,7 @@ def add_best_classical(results: dict, objective: str = "composite_cap", keys=CLA
 
 
 def build_compare(results: dict, methods: list[tuple[str, str]], reference: str) -> dict:
-    regimes = [r for r in list(REGIMES_V2) + ["push", "pick"] if any(m["regime"] == r for m in results[reference])]
+    regimes = [r for r in list(REGIMES_V2) + ["push", "pick", "wipe", "erase", "peg", "drawer", "door"] if any(m["regime"] == r for m in results[reference])]
     metrics_used = [k for k in METRIC_INFO if k != "diverged"]
     values, case_ids = {}, {}
     for r in regimes:
@@ -127,7 +144,9 @@ def summary_table(data: dict, methods: list[tuple[str, str]], pooled_groups: dic
                          fmt(float(np.mean([m["excess_force"] for m in res])), 3), fmt(float(np.mean([m["excess_force_cap"] for m in res])), 3) if has_cap else "—",
                          fmt(float(np.nanmean([m["f_peak"] for m in res])), 3), fmt(float(np.nanmean([m.get("f_peak_20ms", float("nan")) for m in res])), 3) if has_cap else "—",
                          fmt(float(np.mean([m["pos_rmse"] for m in res])), 3), str(int(sum(m["diverged"] for m in res)))])
-    return table(["Group", "Controller", "Composite v2", "Composite (15 N cap)", "Excess force above 30 N (N)", "Excess force above 15 N (N)", "Peak force (N)", "Sustained peak, 20 ms (N)", "Position RMSE (rad)", "Diverged"], rows,
+    from llc.eval.metrics import FORCE_CAP, FORCE_SOFT_LIMIT
+
+    return table(["Group", "Controller", "Composite v2", f"Composite ({FORCE_CAP:g} N cap)", f"Excess force above {FORCE_SOFT_LIMIT:g} N (N)", f"Excess force above {FORCE_CAP:g} N (N)", "Peak force (N)", "Sustained peak, 20 ms (N)", "Position RMSE (rad)", "Diverged"], rows,
                  caption="Means over all cases of a group (every regime of the group pooled). The composites are tuning and selection objectives, not research signals; the cap columns follow ADR 0007.", numeric_cols=(2, 3, 4, 5, 6, 7, 8, 9))
 
 
@@ -156,6 +175,8 @@ def main() -> None:
         parts.append(extra)
     parts.append("<h2>Summary over groups</h2>\n" + nar.NARRATIVE.get("summary_intro", "") + summary_table(data, methods, pooled_groups))
     for gname, results in pooled_groups.items():
+        if args.reference not in results:  # a group evaluated without the reference (the torque-tracking family runs the torque program only, ADR 0011) is reported by its own extras
+            continue
         cmp = build_compare(results, methods, args.reference)
         json.dump(cmp, open(report / "data" / f"compare_{gname}.json", "w"))
         default_regime = cmp["regimes"][0]["key"]
@@ -172,7 +193,8 @@ if __name__ == "__main__":
     main()
 
 
-REGIME_SHORT = {"hold": "Hold (10 N pulses)", "free": "Free motion", "policy": "Policy-like targets", "step": "Step targets", "contact2": "Contact (press, slide)", "blocked": "Blocked target", "task": "Task (held out)", "push": "Box pushing", "pick": "Pick-and-place"}
+REGIME_SHORT = {"hold": "Hold (10 N pulses)", "free": "Free motion", "policy": "Policy-like targets", "step": "Step targets", "contact2": "Contact (press, slide)", "blocked": "Blocked target", "task": "Task (held out)", "push": "Box pushing", "pick": "Pick-and-place",
+                "wipe": "Wiping", "erase": "Erasing (held block)", "peg": "Peg-in-hole", "drawer": "Drawer", "door": "Door"}
 
 
 def wins_table(data: dict, methods: list[tuple[str, str]], reference: str = "pd_shared", caption: str | None = None) -> str:
@@ -187,6 +209,8 @@ def wins_table(data: dict, methods: list[tuple[str, str]], reference: str = "pd_
         pooled_res, _ = pooled(results, data["learned"])
         if reference == "best_classical":
             add_best_classical(pooled_res)
+        if reference not in pooled_res:  # a group without the reference (the torque-tracking family runs the torque program only)
+            continue
         present = [m for m in methods if m[0] in pooled_res]
         cmp = build_compare(pooled_res, present, reference)
         for r in [x["key"] for x in cmp["regimes"]]:

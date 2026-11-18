@@ -13,6 +13,8 @@ import numpy as np
 
 from llc.eval.cases import REGIMES, make_case
 from llc.sim.nominal import NominalModel
+from llc.sim.panda import NUM_JOINTS
+from llc.sim.plant import PLANT
 
 CACHE_DIR = Path("runs/cache")
 
@@ -51,10 +53,10 @@ def sample_batch(pool: dict[str, list[dict]], weights: dict[str, float], batch: 
     regimes = list(weights)
     p = np.array([weights[r] for r in regimes], float)
     p /= p.sum()
-    q_ref = np.zeros((batch, horizon_steps, 7), np.float32)
-    qd_ref = np.zeros((batch, horizon_steps, 7), np.float32)
-    q0 = np.zeros((batch, 7), np.float32)
-    qd0 = np.zeros((batch, 7), np.float32)
+    q_ref = np.zeros((batch, horizon_steps, NUM_JOINTS), np.float32)
+    qd_ref = np.zeros((batch, horizon_steps, NUM_JOINTS), np.float32)
+    q0 = np.zeros((batch, NUM_JOINTS), np.float32)
+    qd0 = np.zeros((batch, NUM_JOINTS), np.float32)
     labels = []
     for b in range(batch):
         regime = regimes[rng.choice(len(regimes), p=p)]
@@ -69,7 +71,7 @@ def sample_batch(pool: dict[str, list[dict]], weights: dict[str, float], batch: 
             k0 = 0
         idx = np.minimum(np.arange(k0, k0 + horizon_steps), n - 1)
         q_ref[b], qd_ref[b] = ref["q"][idx], ref["qd"][idx]
-        q0[b] = ref["q"][k0] + rng.normal(0.0, init_noise_q, 7)
+        q0[b] = ref["q"][k0] + rng.normal(0.0, init_noise_q, NUM_JOINTS)
         qd0[b] = ref["qd"][k0] if regime in ("smooth",) else 0.0
         labels.append(regime)
     if pulse_prob <= 0.0:
@@ -81,7 +83,7 @@ def sample_batch(pool: dict[str, list[dict]], weights: dict[str, float], batch: 
             direction = rng.normal(size=3)
             direction /= np.linalg.norm(direction)
             k0 = int(rng.integers(int(0.2 / dt), max(int(0.2 / dt) + 1, horizon_steps - n_pulse)))
-            f_ext[b, k0:k0 + n_pulse] = 10.0 * direction
+            f_ext[b, k0:k0 + n_pulse] = PLANT.pulse_force * direction
     return q_ref, qd_ref, q0, qd0, labels, f_ext
 
 
@@ -143,10 +145,10 @@ def sample_batch_v2(pool: dict[str, list[dict]], weights: dict[str, float], batc
     regimes = list(weights)
     p = np.array([weights[r] for r in regimes], float)
     p /= p.sum()
-    q_ref = np.zeros((batch, horizon_steps, 7), np.float32)
-    qd_ref = np.zeros((batch, horizon_steps, 7), np.float32)
-    q0 = np.zeros((batch, 7), np.float32)
-    qd0 = np.zeros((batch, 7), np.float32)
+    q_ref = np.zeros((batch, horizon_steps, NUM_JOINTS), np.float32)
+    qd_ref = np.zeros((batch, horizon_steps, NUM_JOINTS), np.float32)
+    q0 = np.zeros((batch, NUM_JOINTS), np.float32)
+    qd0 = np.zeros((batch, NUM_JOINTS), np.float32)
     f_ext = np.zeros((batch, horizon_steps, 3), np.float32)
     priv = {"tool_ref": np.zeros((batch, horizon_steps, 3), np.float32), "normal": np.zeros((batch, 3), np.float32),
             "depth_ref": np.zeros((batch, horizon_steps), np.float32), "has_surface": np.zeros(batch, bool)}
@@ -180,11 +182,11 @@ def sample_batch_v2(pool: dict[str, list[dict]], weights: dict[str, float], batc
             priv["normal"][b] = np.asarray(ref["meta"]["normal"], np.float32)
             priv["depth_ref"][b] = surface_depth(tool[idx], ref["meta"]["surface"])
             priv["has_surface"][b] = True
-        q0[b] = ref["q"][k0] + rng.normal(0.0, noise_scale * init_noise_q, 7)
+        q0[b] = ref["q"][k0] + rng.normal(0.0, noise_scale * init_noise_q, NUM_JOINTS)
         qd0[b] = ref["qd"][k0] if regime in ("free", "contact2", "blocked", "task") else 0.0
         labels.append(regime)
         if regime in ("hold", "free") and rng.uniform() < pulse_prob:
             d = rng.normal(size=3); d /= np.linalg.norm(d)
             kp = int(rng.integers(int(0.2 / dt), max(int(0.2 / dt) + 1, horizon_steps - n_pulse)))
-            f_ext[b, kp:kp + n_pulse] = 10.0 * d
+            f_ext[b, kp:kp + n_pulse] = PLANT.pulse_force * d
     return q_ref, qd_ref, q0, qd0, labels, f_ext, priv

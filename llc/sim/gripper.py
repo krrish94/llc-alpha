@@ -185,6 +185,18 @@ def build_scene(driver_angle: float = DRIVER_CLOSED, out: Path | None = None) ->
     return out
 
 
+OPENING_TO_DRIVER = {0.0: DRIVER_CLOSED, 0.046: 0.45}  # fingertip gap (m) -> driver angle (rad) of the baked gripper
+
+
+def task_scene(opening: float) -> Path:
+    """The plant scene at a fingertip opening for the task families (closed for pushing, 46 mm for the pick)."""
+    driver = OPENING_TO_DRIVER[round(opening, 3)]
+    out = ASSETS / f"panda_2f85_{int(round(1000 * driver)):04d}.xml"
+    if not out.exists():
+        build_scene(driver, out)
+    return out
+
+
 if __name__ == "__main__":
     import sys
 

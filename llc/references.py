@@ -14,13 +14,14 @@ from llc.sim.nominal import NominalModel
 from llc.sim.plant import PLANT
 from llc.sim.panda import HOME, NUM_JOINTS, VELOCITY_LIMITS
 
-TABLE_TOP_Z = 0.15  # m, top face of the table block
-WALL_FACE_X = 0.66  # m, face of the wall block pointing toward the robot
-PRESS_DEPTH = (0.004, 0.014)  # m, commanded press depth of the contact family (protocol v3: 7 to 12 N under 5 N + 500 N/m x depth)
+TABLE_TOP_Z = PLANT.table_top_z  # m, top face of the table block (0.15 on the Panda scenes)
+WALL_FACE_X = PLANT.wall_face_x  # m, face of the wall block pointing toward the robot (0.66 on the Panda scenes)
+PRESS_DEPTH = PLANT.press_depth  # m, commanded press depth of the contact family (protocol v3: 7 to 12 N under 5 N + 500 N/m x depth on the Panda)
+TABLE_XY, WALL_YZ = PLANT.table_xy, PLANT.wall_yz  # base-point ranges of the surface families
 TOOL_RADIUS = PLANT.tool_offset  # m, from the tool point to its contact face (the sphere's radius on plant v2, 0 for the fingertips of v3)
 # Free-space workspace box for the tool tip (above the table, in front of the wall).
-WORKSPACE_LO = np.array([0.30, -0.35, 0.22])
-WORKSPACE_HI = np.array([0.56, 0.35, 0.65])
+WORKSPACE_LO = np.array(PLANT.workspace_lo)
+WORKSPACE_HI = np.array(PLANT.workspace_hi)
 
 
 @dataclass
@@ -224,12 +225,12 @@ def _contact_reference(
     along it, hold, then retract. ``surface`` is 'table' (contact along -z) or 'wall' (along +x)."""
     if surface == "table":
         normal = np.array([0.0, 0.0, 1.0])
-        base = np.array([rng.uniform(0.38, 0.54), rng.uniform(-0.2, 0.2), TABLE_TOP_Z + TOOL_RADIUS])
+        base = np.array([rng.uniform(*TABLE_XY[0]), rng.uniform(*TABLE_XY[1]), TABLE_TOP_Z + TOOL_RADIUS])
         axis = np.array([0.0, 0.0, -1.0])
         slide_dir = np.array([0.0, 1.0, 0.0])
     else:
         normal = np.array([-1.0, 0.0, 0.0])
-        base = np.array([WALL_FACE_X - TOOL_RADIUS, rng.uniform(-0.15, 0.15), rng.uniform(0.25, 0.45)])
+        base = np.array([WALL_FACE_X - TOOL_RADIUS, rng.uniform(*WALL_YZ[0]), rng.uniform(*WALL_YZ[1])])
         axis = np.array([0.5, 0.0, -np.sqrt(3) / 2])  # tool tilted 60 deg down so the wrist stays clear of the wall
         slide_dir = np.array([0.0, 0.0, 1.0])
     off = base + 0.03 * normal
@@ -288,8 +289,8 @@ def transition(rng: np.random.Generator, nominal: NominalModel, approach_speed: 
 
 
 # ----------------------------------------------------------------------------- protocol v2 families
-JOINT_MARGIN = 0.15  # rad kept from the joint limits when sampling configurations
-Q1_TRAIN = (-2.6, 1.2)  # base-yaw range used for training; (1.2, 2.6) is the held-out workspace
+JOINT_MARGIN = PLANT.joint_margin  # rad kept from the joint limits when sampling configurations
+Q1_TRAIN = PLANT.q1_train  # base-yaw range used for training; the plant's q1_heldout is the held-out workspace
 
 
 def _random_joint_config(rng: np.random.Generator, nominal: NominalModel, q1_range=Q1_TRAIN, near: np.ndarray | None = None,
@@ -306,7 +307,7 @@ def _random_joint_config(rng: np.random.Generator, nominal: NominalModel, q1_ran
             q[0] = float(np.clip(q[0], *q1_range))
         if nominal.in_collision(q):
             continue
-        if nominal.tool_pos(q)[2] < 0.08:
+        if nominal.tool_pos(q)[2] < PLANT.tool_min_z:
             continue
         return q
     raise RuntimeError("no collision-free joint configuration found")
@@ -342,6 +343,16 @@ def policy_like(rng: np.random.Generator, nominal: NominalModel, speed: float, r
     return Reference(base.t, q, z, z.copy(), "policy", [(0.0, base.t[-1], "motion")], {"speed": speed, "rate_hz": rate_hz, "jitter": jitter, "jump_prob": jump_prob})
 
 
+def _table_axis(rng: np.random.Generator) -> np.ndarray:
+    """Tool axis of the table branch of the blocked and task families: straight down on the Panda (no random draw, so the
+    record's streams are kept), tilted forward within the plant's range on arms whose wrist cannot point straight down."""
+    lo, hi = PLANT.blocked_tilt_deg
+    if hi <= 0.0:
+        return np.array([0.0, 0.0, -1.0])
+    t = np.radians(rng.uniform(lo, hi))
+    return np.array([np.sin(t), 0.0, -np.cos(t)])
+
+
 WALL_TILT_DEG = PLANT.wall_tilt_deg  # tool axis angle below horizontal at the wall (erratum 3: at 60 deg the hand reached the wall before the tool; v2 30 to 45, v3 0 to 15)
 WALL_LINK_MARGIN = 0.02  # m: no robot link other than the tool within this distance of the wall at the deepest reference pose
 
@@ -352,16 +363,16 @@ def blocked(rng: np.random.Generator, nominal: NominalModel, speed: float, dt: f
     target cannot be tracked and the controller must yield, then recover when the path returns."""
     surface = "table" if rng.uniform() < 0.6 else "wall"
     if surface == "table":
-        x, y = rng.uniform(0.38, 0.54), rng.uniform(-0.2, 0.2)
-        a = np.array([x + rng.uniform(-0.05, 0.05), y + rng.uniform(-0.05, 0.05), rng.uniform(0.28, 0.40)])
-        b = np.array([x, y, rng.uniform(0.09, 0.13)])  # 4 to 8 cm below the surface, with the tool tip inside the table
-        c = np.array([x + rng.uniform(-0.08, 0.08), y + rng.uniform(-0.08, 0.08), rng.uniform(0.28, 0.40)])
-        axis, normal, offset = np.array([0.0, 0.0, -1.0]), np.array([0.0, 0.0, 1.0]), TABLE_TOP_Z + TOOL_RADIUS
+        x, y = rng.uniform(*TABLE_XY[0]), rng.uniform(*TABLE_XY[1])
+        a = np.array([x + rng.uniform(-0.05, 0.05), y + rng.uniform(-0.05, 0.05), TABLE_TOP_Z + rng.uniform(*PLANT.approach_height)])
+        b = np.array([x, y, TABLE_TOP_Z - 0.06 + rng.uniform(0.0, 0.04)])  # 2 to 6 cm below the surface, with the tool tip inside the table (the Panda's random stream kept)
+        c = np.array([x + rng.uniform(-0.08, 0.08), y + rng.uniform(-0.08, 0.08), TABLE_TOP_Z + rng.uniform(*PLANT.approach_height)])
+        axis, normal, offset = _table_axis(rng), np.array([0.0, 0.0, 1.0]), TABLE_TOP_Z + TOOL_RADIUS
     else:
-        y, z = rng.uniform(-0.15, 0.15), rng.uniform(0.25, 0.45)
-        a = np.array([rng.uniform(0.45, 0.55), y + rng.uniform(-0.05, 0.05), z + rng.uniform(-0.05, 0.05)])
+        y, z = rng.uniform(*WALL_YZ[0]), rng.uniform(*WALL_YZ[1])
+        a = np.array([WALL_FACE_X - 0.21 + rng.uniform(0.0, 0.10), y + rng.uniform(-0.05, 0.05), z + rng.uniform(-0.05, 0.05)])
         b = np.array([WALL_FACE_X - TOOL_RADIUS + rng.uniform(*wall_depth), y, z])  # 3 to 6 cm inside the wall (erratum 3: 4 to 8 cm drove the links into the wall)
-        c = np.array([rng.uniform(0.45, 0.55), y + rng.uniform(-0.08, 0.08), z + rng.uniform(-0.08, 0.08)])
+        c = np.array([WALL_FACE_X - 0.21 + rng.uniform(0.0, 0.10), y + rng.uniform(-0.08, 0.08), z + rng.uniform(-0.08, 0.08)])
         tilt = np.radians(rng.uniform(*wall_tilt_deg))
         axis, normal, offset = np.array([np.cos(tilt), 0.0, -np.sin(tilt)]), np.array([-1.0, 0.0, 0.0]), -(WALL_FACE_X - TOOL_RADIUS)
     v = rng.uniform(0.08, 0.3) * speed
@@ -423,7 +434,7 @@ def contact_v2(rng: np.random.Generator, nominal: NominalModel, speed: float, dt
     slide_speed = float(rng.uniform(0.05, 0.2) * speed)
     if surface == "table":
         normal = np.array([0.0, 0.0, 1.0])
-        base = np.array([rng.uniform(0.38, 0.54), rng.uniform(-0.2, 0.2), TABLE_TOP_Z + TOOL_RADIUS])
+        base = np.array([rng.uniform(*TABLE_XY[0]), rng.uniform(*TABLE_XY[1]), TABLE_TOP_Z + TOOL_RADIUS])
         tilt = np.radians(rng.uniform(*PLANT.table_tilt_deg))
         ang = rng.uniform(0, 2 * np.pi)
         axis = np.array([np.sin(tilt) * np.cos(ang), np.sin(tilt) * np.sin(ang), -np.cos(tilt)])
@@ -432,7 +443,7 @@ def contact_v2(rng: np.random.Generator, nominal: NominalModel, speed: float, dt
         slide_len = 0.10
     else:
         normal = np.array([-1.0, 0.0, 0.0])
-        base = np.array([WALL_FACE_X - TOOL_RADIUS, rng.uniform(-0.15, 0.15), rng.uniform(0.25, 0.45)])
+        base = np.array([WALL_FACE_X - TOOL_RADIUS, rng.uniform(*WALL_YZ[0]), rng.uniform(*WALL_YZ[1])])
         tilt = np.radians(rng.uniform(*WALL_TILT_DEG))  # erratum 3: 50 to 70 deg put the hand on the wall
         axis = np.array([np.cos(tilt), 0.0, -np.sin(tilt)])
         s_ang = rng.uniform(0, 2 * np.pi)
@@ -472,19 +483,19 @@ def task(rng: np.random.Generator, nominal: NominalModel, speed: float, dt: floa
     """Task-like sequence: reach, descend, press 1 cm, slide 10 cm, lift, transport, descend, press
     0.5 cm, lift; all on the table with the tool pointing down (evaluation family)."""
     v_free, v_contact = 0.4 * speed, 0.1 * speed
-    p1 = np.array([rng.uniform(0.38, 0.52), rng.uniform(-0.2, 0.1), TABLE_TOP_Z + TOOL_RADIUS])
+    p1 = np.array([rng.uniform(TABLE_XY[0][0], TABLE_XY[0][1] - 0.02), rng.uniform(TABLE_XY[1][0], TABLE_XY[1][1] - 0.1), TABLE_TOP_Z + TOOL_RADIUS])
     s_ang = rng.uniform(0, 2 * np.pi)
     p2 = p1 + 0.10 * np.array([np.cos(s_ang), np.sin(s_ang), 0.0])
-    p2[0] = np.clip(p2[0], 0.37, 0.56); p2[1] = np.clip(p2[1], -0.25, 0.25)
-    p3 = np.array([rng.uniform(0.38, 0.52), rng.uniform(-0.1, 0.2), TABLE_TOP_Z + TOOL_RADIUS])
-    start = p1 + np.array([rng.uniform(-0.1, 0.1), rng.uniform(-0.1, 0.1), rng.uniform(0.15, 0.25)])
+    p2[0] = np.clip(p2[0], TABLE_XY[0][0] - 0.01, TABLE_XY[0][1] + 0.02); p2[1] = np.clip(p2[1], TABLE_XY[1][0] - 0.05, TABLE_XY[1][1] + 0.05)
+    p3 = np.array([rng.uniform(TABLE_XY[0][0], TABLE_XY[0][1] - 0.02), rng.uniform(TABLE_XY[1][0] + 0.1, TABLE_XY[1][1]), TABLE_TOP_Z + TOOL_RADIUS])
+    start = p1 + np.array([rng.uniform(-0.1, 0.1), rng.uniform(-0.1, 0.1), rng.uniform(*PLANT.task_start_height)])
     up = np.array([0.0, 0.0, 1.0])
     pts = [start, p1 + 0.03 * up, p1 - 0.01 * up, p2 - 0.01 * up, p2 + 0.05 * up, p3 + 0.05 * up, p3 - 0.005 * up, p3 + 0.05 * up]
     speeds = [v_free, v_contact, v_contact, v_contact, v_free, v_contact, v_contact]
     dwell = [0.2, 0.5, 0.3, 0.2, 0.2, 0.3, 0.3]
     labs = ["reach", "descend", "press", "slide", "lift", "transport", "descend2", "press2", "lift2"]
     path, times = _tool_waypoints(pts, speeds, dwell, dt)
-    axis = np.array([0.0, 0.0, -1.0])
+    axis = _table_axis(rng)
     q_start, err = _ik_multistart(nominal, start, HOME, axis, rng)
     if err > 1e-3 or nominal.in_collision(q_start):
         return None
@@ -506,3 +517,56 @@ def task(rng: np.random.Generator, nominal: NominalModel, speed: float, dt: floa
         phases.append((times[2 * i + 1], times[2 * i + 2], dwell_label))
     return Reference(t, q, qd, qdd, "task", phases, {"tool_path": path, "surface": "table", "speed": speed, "normal": [0.0, 0.0, 1.0],
                                                      "t_contact_nominal": float(t[np.argmax((path[:, 2] - (TABLE_TOP_Z + TOOL_RADIUS)) < 0.0)])})
+
+
+def wipe(rng: np.random.Generator, nominal: NominalModel, speed: float, dt: float = 1e-3) -> Reference | None:
+    """Wiping (protocol v5, ADR 0012): approach, press to the band, a raster of three passes 8 cm long (6 cm on the wall)
+    3 cm apart at 10 cm/s, release; table (70%) or wall. The metrics are the press-and-slide family's over the raster."""
+    surface = "table" if rng.uniform() < 0.7 else "wall"
+    depth = float(rng.uniform(*PRESS_DEPTH))
+    approach = float(rng.uniform(0.05, 0.2) * speed)
+    slide_speed = 0.1 * speed
+    if surface == "table":
+        normal = np.array([0.0, 0.0, 1.0])
+        (x_lo, x_hi), (y_lo, y_hi) = TABLE_XY
+        base = np.array([rng.uniform(x_lo, x_hi - 0.06), rng.uniform(y_lo + 0.05, y_hi - 0.05), TABLE_TOP_Z + TOOL_RADIUS])
+        tilt = np.radians(rng.uniform(*PLANT.table_tilt_deg))
+        ang = rng.uniform(0, 2 * np.pi)
+        axis = np.array([np.sin(tilt) * np.cos(ang), np.sin(tilt) * np.sin(ang), -np.cos(tilt)])
+        along, across, length = np.array([0.0, 1.0, 0.0]), np.array([1.0, 0.0, 0.0]), 0.08
+    else:
+        normal = np.array([-1.0, 0.0, 0.0])
+        (y_lo, y_hi), (z_lo, z_hi) = WALL_YZ
+        base = np.array([WALL_FACE_X - TOOL_RADIUS, rng.uniform(y_lo + 0.04, y_hi - 0.04), rng.uniform(z_lo, z_hi - 0.06)])
+        axis = np.array([0.5, 0.0, -np.sqrt(3) / 2])
+        along, across, length = np.array([0.0, 0.0, 1.0]), np.array([0.0, 1.0, 0.0]), 0.06
+    sign = 1.0 if rng.uniform() < 0.5 else -1.0
+    off = base + 0.03 * normal
+    pressed = base - depth * normal
+    pts, speeds, dwell, labels = [off, pressed], [approach], [0.4], ["approach", "press"]
+    p = pressed.copy()
+    for i in range(3):  # three passes, stepping across between them
+        p = p + sign * length * along * (1 if i % 2 == 0 else -1)
+        pts.append(p.copy()); speeds.append(slide_speed); dwell.append(0.1); labels += ["slide", "press"]
+        if i < 2:
+            p = p + 0.03 * across
+            pts.append(p.copy()); speeds.append(slide_speed); dwell.append(0.1); labels += ["slide", "press"]
+    pts.append(pts[-1] + 0.03 * normal); speeds.append(approach); dwell.append(0.5); labels += ["release", "free"]
+    path, times = _tool_waypoints(pts, speeds, dwell, dt)
+    q_start, err = _ik_multistart(nominal, off, HOME, axis, rng)
+    if err > 1e-3 or nominal.in_collision(q_start):
+        return None
+    spline = _tool_path_to_joint(path, nominal, q_start, axis, dt)
+    if spline is None:
+        return None
+    t = np.arange(len(path)) * dt
+    q, qd, qdd = spline(t), spline(t, 1), spline(t, 2)
+    if np.max(np.abs(qd) / VELOCITY_LIMITS) > 0.6:
+        return None
+    phases = [(times[i], times[i + 1], labels[i]) for i in range(len(labels))]
+    samples = [(q[min(len(q) - 1, int(times[i] / dt))], depth) for i in range(2, len(times) - 2, 2)]
+    if not _links_clear(nominal, samples, pressed=surface):
+        return None
+    signed = (path - base) @ normal
+    return Reference(t, q, qd, qdd, "wipe", phases, {"tool_path": path, "surface": surface, "approach_speed": approach, "slide_speed": slide_speed, "depth": depth,
+                                                     "t_contact_nominal": float(t[np.argmax(signed < 0.0)]), "normal": normal.tolist(), "passes": 3, "pass_length": length})

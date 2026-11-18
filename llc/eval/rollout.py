@@ -6,7 +6,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from llc.eval.cases import Case
-from llc.sim.panda import PandaSim
+from llc.sim.panda import NUM_JOINTS, PandaSim
 
 
 @dataclass
@@ -30,6 +30,7 @@ class Episode:
     obj_quat: np.ndarray | None = None  # (T,4)
     f_object: np.ndarray | None = None  # (T,) normal force between the tool and the object
     f_object_env: np.ndarray | None = None  # (T,) normal force between the object and the environment
+    grasped: bool | None = None  # pick family (protocol v4): the weld activated at the grasp instant
 
 
 def rollout(sim: PandaSim, controller, case: Case) -> Episode:
@@ -42,12 +43,21 @@ def rollout(sim: PandaSim, controller, case: Case) -> Episode:
     if task is not None:  # Milestone 9 task families: place the object; a held object is welded until the release time
         import mujoco
 
-        sim.set_object_pose(task["object"], np.asarray(task["object_pos"]), np.asarray(task["object_quat"]))
+        if task.get("fixture") is not None:  # ADR 0012: a static fixture placed per case
+            sim.set_object_base(task["fixture"], np.asarray(task["fixture_pos"]), np.asarray(task.get("fixture_quat", [1.0, 0.0, 0.0, 0.0])))
+        if task.get("object_q0") is not None:  # a jointed object: its base frame, then its joint position
+            sim.set_object_base(task["object"], np.asarray(task["base_pos"]), np.asarray(task.get("base_quat", [1.0, 0.0, 0.0, 0.0])))
+            sim.set_object_joint(task["object"], float(task["object_q0"]))
+        else:
+            sim.set_object_pose(task["object"], np.asarray(task["object_pos"]), np.asarray(task["object_quat"]))
         if task.get("weld"):
             eq_hold = mujoco.mj_name2id(sim.model, mujoco.mjtObj.mjOBJ_EQUALITY, "hold")
-            sim.data.eq_active[eq_hold] = 1
-    k_release = int(round(task["release_time"] / float(ref.t[1] - ref.t[0]))) if task is not None and task.get("weld") else -1
-    log = {k: np.zeros((n, 7)) for k in ("q", "qd", "tau_cmd", "tau")}
+            sim.data.eq_active[eq_hold] = 1 if task.get("weld_start", True) else 0
+    dt_ref = float(ref.t[1] - ref.t[0])
+    k_release = int(round(task["release_time"] / dt_ref)) if task is not None and task.get("weld") else -1
+    k_grasp = int(round(task["grasp_time"] / dt_ref)) if task is not None and task.get("grasp_time") is not None else -1
+    grasped = None if k_grasp < 0 else False
+    log = {k: np.zeros((n, NUM_JOINTS)) for k in ("q", "qd", "tau_cmd", "tau")}
     tool = np.zeros((n, 3))
     f_n, f_t = np.zeros(n), np.zeros(n)
     n_tool, n_other = np.zeros(n, int), np.zeros(n, int)
@@ -66,9 +76,13 @@ def rollout(sim: PandaSim, controller, case: Case) -> Episode:
             sim.apply_tool_force(np.asarray(case.pulse.force))
         else:
             sim.apply_tool_force(np.zeros(3))
+        if eq_hold is not None and k == k_grasp:  # protocol v4: the grasp succeeds only if the block is inside the gap
+            grasped = sim.try_grasp(eq_hold, task["object"], *task["grasp_tol"])
         if eq_hold is not None and k == k_release:
             sim.data.eq_active[eq_hold] = 0
         tau_applied = sim.step(np.nan_to_num(tau_cmd, nan=0.0, posinf=0.0, neginf=0.0))
+        if hasattr(controller, "tau_command"):  # a servo loop (ADR 0011): the upper frame's law at the true state is the command
+            tau_cmd = controller.tau_command
         c = sim.contact()
         log["q"][k], log["qd"][k] = sim.q, sim.qd
         log["tau_cmd"][k], log["tau"][k] = tau_cmd, tau_applied
@@ -81,4 +95,4 @@ def rollout(sim: PandaSim, controller, case: Case) -> Episode:
             diverged = True
             break
     return Episode(case.id, case.regime, ref.t, log["q"], log["qd"], ref.q, ref.qd, log["tau_cmd"], log["tau"],
-                   tool, f_n, f_t, n_tool, n_other, diverged, obj_pos, obj_quat, f_obj, f_obj_env)
+                   tool, f_n, f_t, n_tool, n_other, diverged, obj_pos, obj_quat, f_obj, f_obj_env, grasped)

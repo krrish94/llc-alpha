@@ -146,6 +146,41 @@ def _load_episodes(episodes: list[tuple[str, str, str]]) -> list[tuple[str, str,
 # ---------- scene ----------
 
 
+def _task_of(ep) -> dict | None:
+    """The episode's task description (protocol v5 episodes carry it as JSON: jointed objects and fixtures are placed per case)."""
+    if "task_json" not in ep:
+        return None
+    raw = ep["task_json"]
+    return json.loads(str(raw.item() if hasattr(raw, "item") else raw))
+
+
+def _place_task(model: mujoco.MjModel, ep) -> None:
+    """A fixture's and a jointed object's base frames, as the case placed them."""
+    task = _task_of(ep)
+    if not task:
+        return
+    if task.get("fixture") is not None:
+        b = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, task["fixture"])
+        model.body_pos[b] = task["fixture_pos"]; model.body_quat[b] = task.get("fixture_quat", [1.0, 0.0, 0.0, 0.0])
+    if task.get("object_q0") is not None:
+        b = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, task["object"])
+        model.body_pos[b] = task["base_pos"]; model.body_quat[b] = task.get("base_quat", [1.0, 0.0, 0.0, 0.0])
+
+
+def _set_object(model: mujoco.MjModel, data: mujoco.MjData, n_arm: int, ep, i: int) -> None:
+    task = _task_of(ep)
+    if task is not None and task.get("object_q0") is not None:  # one joint: its value from the body's logged pose
+        if model.nq - n_arm == 1:
+            if task.get("axis") is not None:  # a slide joint along a world axis
+                data.qpos[n_arm] = float((np.asarray(ep["obj_pos"][i]) - np.asarray(task["base_pos"])) @ np.asarray(task["axis"]))
+            else:  # a hinge about z: the body's yaw against its base's
+                q, b = np.asarray(ep["obj_quat"][i]), np.asarray(task.get("base_quat", [1.0, 0.0, 0.0, 0.0]))
+                yaw = lambda w: np.arctan2(2 * (w[0] * w[3] + w[1] * w[2]), 1 - 2 * (w[2] ** 2 + w[3] ** 2))
+                data.qpos[n_arm] = float((yaw(q) - yaw(b) + np.pi) % (2 * np.pi) - np.pi)
+        return
+    data.qpos[n_arm:n_arm + 3], data.qpos[n_arm + 3:n_arm + 7] = ep["obj_pos"][i], ep["obj_quat"][i]
+
+
 def _render_model(view_w: int, view_h: int, scene_path: str | Path | None = None) -> mujoco.MjModel:
     """The saved scene (or a task scene with its free objects) with a flat sky in the design's separator gray, added in memory for rendering only."""
     spec = mujoco.MjSpec.from_file(str(scene_path or SCENE_PATH))
@@ -305,6 +340,8 @@ def render_comparison(episodes: list[tuple[str, str, str]], out_mp4: str, title:
 
     # Renderer and commanded tool positions at the frame times.
     model = _render_model(view_w, view_h, scene)
+    for _, _, _, ep0 in loaded:
+        _place_task(model, ep0)
     data = mujoco.MjData(model)
     renderer = mujoco.Renderer(model, height=view_h, width=view_w)
     option = mujoco.MjvOption()
@@ -331,9 +368,10 @@ def render_comparison(episodes: list[tuple[str, str, str]], out_mp4: str, title:
             draw.text((x_right, y_title + 2), speed_text, font=f_clock, fill=muted, anchor="ra")
             draw.text((x_right - f_clock.getlength(speed_text) - 14, y_title + 2), f"t = {t[i]:.3f} s", font=f_clock, fill=text, anchor="ra")
             for v, (key, _, _, ep) in enumerate(loaded):
-                data.qpos[:7] = ep["q"][i]
-                if "obj_pos" in ep:  # task scene: the free object's joint follows the arm's seven
-                    data.qpos[7:10], data.qpos[10:14] = ep["obj_pos"][i], ep["obj_quat"][i]
+                n_arm = ep["q"].shape[1]  # the arm's joints come first (7 on the Panda, 6 on the YAM)
+                data.qpos[:n_arm] = ep["q"][i]
+                if "obj_pos" in ep:  # task scene: the object's joint follows the arm's (a free box, or a one-joint panel of protocol v5)
+                    _set_object(model, data, n_arm, ep, int(i))
                 mujoco.mj_forward(model, data)
                 renderer.update_scene(data, camera=camera, scene_option=option)
                 _add_trace(renderer.scene, ep["tool_pos"], t, int(i), method_rgb01[v], gray01)

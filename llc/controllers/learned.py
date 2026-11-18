@@ -17,9 +17,13 @@ from llc.sim.panda import NUM_JOINTS, TORQUE_LIMITS
 class LearnedController:
     name = "learned"
 
-    def __init__(self, policy: Policy, nominal: NominalModel, dt: float = 1e-3, latency_s: float | None = None):
+    def __init__(self, policy: Policy, nominal: NominalModel, dt: float = 1e-3, latency_s: float | None = None, base_scale=None):
         """``latency_s`` overrides the policy's compute latency (ADR 0010 realism check): a decision made
-        at step k takes effect ``latency`` steps later, in both the period path and the hold path."""
+        at step k takes effect ``latency`` steps later, in both the period path and the hold path.
+        ``base_scale`` = (stiffness multipliers, damping multipliers) of the base PD for this episode (ADR 0012): the
+        fast loop runs at the scaled gains and the policy sees the scales when it has the input."""
+        from llc.learning.policy import encode_extras
+
         self.policy, self.nominal = policy.eval(), nominal
         cfg = policy.cfg
         self.period = max(1, int(round(1.0 / (cfg.rate_hz * dt))))
@@ -30,8 +34,11 @@ class LearnedController:
         self.kind, self.history = cfg.kind, cfg.history
         self.preview = cfg.preview  # > 0: the runner passes the future targets (preview_indices) at every call
         self.feedforward = cfg.feedforward  # the PD base carries the nominal inverse-dynamics feedforward of the reference
-        self.kp_shared = np.asarray(cfg.kp_shared)
-        self.kd_shared = np.asarray(cfg.kd_shared)
+        kp_scale, kd_scale = (np.ones(NUM_JOINTS), np.ones(NUM_JOINTS)) if base_scale is None else (np.asarray(base_scale[0], float), np.asarray(base_scale[1], float))
+        self.base_scale = (kp_scale, kd_scale)
+        self.kp_shared = np.asarray(cfg.kp_shared) * kp_scale
+        self.kd_shared = np.asarray(cfg.kd_shared) * kd_scale
+        self.extras = encode_extras(cfg, kp_scale, kd_scale, self.latency * dt) if cfg.extra_dim > 0 else None
         self.limits_t = torch.tensor(TORQUE_LIMITS, dtype=torch.float32)
         self.dt = dt
         self.inverse_dynamics = None
@@ -66,7 +73,7 @@ class LearnedController:
         if not evaluate:
             return None
         with torch.no_grad():
-            obs = self.buffer.observation(f(q), f(qd), f(q_ref), f(qd_ref), self.limits_t, None if q_ref_future is None else f(q_ref_future))
+            obs = self.buffer.observation(f(q), f(qd), f(q_ref), f(qd_ref), self.limits_t, None if q_ref_future is None else f(q_ref_future), self.extras)
             self.last_obs = obs
             out = self.policy.decode(self.policy(obs))
         self.n_updates += 1
@@ -101,6 +108,25 @@ class LearnedController:
             tau = held["torque"]
         self.last_tau = np.clip(tau, -TORQUE_LIMITS, TORQUE_LIMITS)
         return tau
+
+    def frame(self, t, q, qd, q_ref, qd_ref, qdd_ref, q_ref_future=None) -> dict:
+        """The impedance frame at a host instant (ADR 0011): the network decides now (the servo loop calls this
+        once per host frame, so the policy's period and hold are in host frames and its compute latency is 0),
+        and the fast law's gains and additive terms are returned for the servo to hold."""
+        from llc.sim.servo import make_frame
+
+        assert self.latency == 0 and self.hold == 1 and self.period == 1, "a policy run through a servo profile decides at every host frame"
+        held = self._network_update(q, qd, q_ref, qd_ref, q_ref_future=q_ref_future)
+        self.held = held = self.filter(held)
+        self.k += 1
+        base = self.base_term(q, qd_ref, qdd_ref)
+        if self.kind == "learned_gains":
+            return make_frame(q_ref, qd_ref, held["kp"], held["kd"], base)
+        if self.kind == "pd_residual":
+            return make_frame(q_ref, qd_ref, self.kp_shared, self.kd_shared, base + held["residual"])
+        if self.kind == "pd_gain_residual":
+            return make_frame(q_ref, qd_ref, held["kp_scale"] * self.kp_shared, held["kd_scale"] * self.kd_shared, base + held["residual"])
+        return make_frame(q_ref, qd_ref, np.zeros(NUM_JOINTS), np.zeros(NUM_JOINTS), held["torque"])
 
 
 def load_learned_controller(path, nominal: NominalModel, **options) -> LearnedController:

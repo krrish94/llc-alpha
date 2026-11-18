@@ -97,7 +97,11 @@
     "distill_v3_r2_two_teachers": "#2e7d32",
     "distill_ff": "#6a1b9a",
     "distill_two": "#2e7d32",
-    "distill_torque": "#e65100"
+    "distill_torque": "#e65100",
+    "pd_family": "#b8860b",
+    "distill_consol_l4": "#6a3d9a",
+    "distill_consol_l10": "#1b9e77",
+    "distill_consol_l4_small": "#b2a0c7"
   },
   "reference": "#8c8c8c",
   "text": "#1d1d1f",

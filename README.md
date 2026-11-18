@@ -6,7 +6,7 @@ The controller that resulted does not replace the classical loop; it adds to it.
 
 ## The notebook
 
-The evidence is a research notebook of eighteen reports under `research/reports/`, each with its question, setup, figures, tables, clips, findings and caveats. Start with the handoff page (report 18), a standalone summary of the whole investigation: the setting and the success criterion, the controller and its training, the hypothesis space with the outcome of every cell, what worked and what did not, the gaps, and what to revisit at scale.
+The evidence is a research notebook of twenty-three reports under `research/reports/`, each with its question, setup, figures, tables, clips, findings and caveats. Start with the handoff page (report 18), a standalone summary of the investigation up to the torque-interface controller: the setting and the success criterion, the controller and its training, the hypothesis space with the outcome of every cell, what worked and what did not, the gaps, and what to revisit at scale. Reports 19 to 22 take the controller to position-controlled arms (servo interface profiles, a model-based and a learned torque-command interface, host-rate students, the i2rt YAM, a DC-motor layer; Checkpoint 3 is report 22). Report 23, in progress, is the consolidation on the torque-interface Panda: ten times the training data under a wider plant distribution and five new contact-rich families (wiping, erasing with a held block, peg-in-hole with a chamfer, a drawer, a door).
 
 To read it, build the static site and open it in a browser:
 

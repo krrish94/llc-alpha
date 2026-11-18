@@ -67,25 +67,37 @@ def ideal_label(sim, nominal, q, qd, tau_cmd, tau_ext) -> np.ndarray:
 
 
 def collect_one(args) -> dict[str, np.ndarray]:
-    student_path, case_spec, inject, seed = args
+    student_path, case_spec, inject, seed = args[:4]
+    servo = args[4] if len(args) > 4 else None  # ADR 0011: the student decides at the host frame through the profile's servo loop
     if not _worker:
         _init_worker()
     case = _get_case(case_spec)
-    sim = _get_sim(case.perturbation, seed=case.seed)
+    sim = _get_sim(case.perturbation, seed=case.seed, scene=(case.meta.get("task") or {}).get("scene"))  # a task family brings its scene (protocol v4 and v5)
     nominal = _worker["nominal"]
-    ctrl = load_learned_controller(student_path, nominal)
+    options = {"latency_s": 0.0, "dt": servo["period"]} if servo else {}
+    if "base_scale" in case.meta:  # ADR 0012: the episode's base gains (the nominal law of the label is the base's own)
+        options["base_scale"] = case.meta["base_scale"]
+    if "latency_s" in case.meta and not servo:
+        options["latency_s"] = case.meta["latency_s"]
+    ctrl = load_learned_controller(student_path, nominal, **options)
+    runner = ctrl
+    if servo:
+        from llc.sim.servo import ModelInterface, ServoLoop, get_profile
+
+        profile = get_profile(servo["profile"], **servo.get("overrides", {}))
+        runner = ServoLoop(ctrl, profile, ModelInterface(profile, np.asarray(servo["kp"]), np.asarray(servo["kd"])))
     ref = case.reference
     n = len(ref.t)
     rng = np.random.default_rng(seed)
     ext = external_torque_signal(rng, n, sim.dt) if inject else np.zeros((n, NUM_JOINTS))
     sim.reset(case.q0, case.qd0)
-    ctrl.reset()
+    runner.reset()
     rows = []
     jac = np.zeros((3, sim.model.nv))
     for k in range(n):
         q_obs, qd_obs = sim.observe()
         before = ctrl.n_updates
-        tau_raw = np.nan_to_num(ctrl(ref.t[k], q_obs, qd_obs, ref.q[k], ref.qd[k], ref.qdd[k]))
+        tau_raw = np.nan_to_num(runner(ref.t[k], q_obs, qd_obs, ref.q[k], ref.qd[k], ref.qdd[k]))
         tau_cmd = np.clip(tau_raw, -TORQUE_LIMITS, TORQUE_LIMITS)
         f_pulse = np.zeros(3)  # the case's tool-force pulse (hold family), as the evaluation rollout applies it
         if case.pulse is not None and case.pulse.t_start <= ref.t[k] < case.pulse.t_start + case.pulse.duration:
@@ -102,18 +114,29 @@ def collect_one(args) -> dict[str, np.ndarray]:
             saturated = (np.abs(tau_nom) >= TORQUE_LIMITS).any()  # the nominal law exceeds an actuator limit (step onsets, target jumps): no feasible correction
             tau_nom = np.clip(tau_nom, -TORQUE_LIMITS, TORQUE_LIMITS)
             label = ideal_label(sim, nominal, q, qd, tau_nom, tau_ext)
-            if not saturated and np.abs(label - tau_nom).max() <= RESIDUAL_BOUND:  # corrections beyond 30 Nm are infeasible for the actuators: dropped
+            keep = not saturated and np.abs(label - tau_nom).max() <= RESIDUAL_BOUND  # the v3 rule: corrections beyond 30 Nm are infeasible for the actuators: dropped
+            if "base_scale" in case.meta:  # ADR 0012 amendment 1 (the v5 distribution): keep every decision; the correction clipped to the residual's authority, none where the nominal law saturates
+                authority = float(ctrl.policy.cfg.residual_fraction) * TORQUE_LIMITS
+                label = np.clip(tau_nom if saturated else tau_nom + np.clip(label - tau_nom, -authority, authority), -TORQUE_LIMITS, TORQUE_LIMITS)  # the applied torque
+                keep = True
+            if keep:
                 rows.append((ctrl.last_obs[0].numpy().astype(np.float32), q_obs.astype(np.float32), qd_obs.astype(np.float32), ref.q[k].astype(np.float32), ref.qd[k].astype(np.float32),
-                             ctrl.base_term(q_obs, ref.qd[k], ref.qdd[k]).astype(np.float32), label.astype(np.float32)))
+                             ctrl.base_term(q_obs, ref.qd[k], ref.qdd[k]).astype(np.float32), label.astype(np.float32), np.zeros(NUM_JOINTS, np.float32),
+                             ctrl.base_scale[0].astype(np.float32), ctrl.base_scale[1].astype(np.float32)))  # no surface in free space: jn = 0; the episode's gain scales
         sim.data.qfrc_applied[:NUM_JOINTS] = ext[k]
         sim.step(tau_cmd)
         ctrl.last_tau = tau_cmd
         if np.abs(sim.qd).max() > 50.0:
+            blown_up = True
             break
+    else:
+        blown_up = False
     sim.data.qfrc_applied[:] = 0.0
     sim.apply_tool_force(np.zeros(3))
-    out = {k: np.stack([r[i] for r in rows]) for i, k in enumerate(FIELDS)} if rows else {k: np.zeros((0, 7), np.float32) for k in FIELDS}
-    out["diverged"] = np.array([len(rows) < n // 10])
+    out = {k: np.stack([r[i] for r in rows]) for i, k in enumerate(FIELDS)} if rows else {k: np.zeros((0, NUM_JOINTS), np.float32) for k in FIELDS}
+    # Diverged: the plant blew up, or fewer than a tenth of the decisions kept a label. The threshold counts decisions, not
+    # physics steps (erratum of report 21: against the step count, every 50 Hz episode was flagged).
+    out["diverged"] = np.array([blown_up or len(rows) < max(1, ctrl.n_updates // 10)])
     out["case_id"] = np.array([case.id])
     out["regime"] = np.array([case.regime])
     return out

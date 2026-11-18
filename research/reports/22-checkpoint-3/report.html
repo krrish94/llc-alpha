@@ -1,0 +1,326 @@
+<h2>Summary</h2>
+<p><strong>Verdict.</strong> The learned low-level controller of Checkpoint 2 carries over to position-controlled arms as a host-rate student: a network that decides once per host frame on the servo's quantised feedback and sends an impedance frame, distilled from scratch through the interface by the two-teacher recipe. On the i2rt YAM through its own interface (MIT mode on CAN at 250 Hz) the student meets the across-the-board criterion on 32 of 33 family-and-group rows against the best classical controller through the same interface, in one seed, and keeps every row under a DC-motor layer whose unknowns are randomised per case. On the Panda, where the same profiles are an ablation of the interface alone, the host-rate students meet 24 to 26 of 33 rows through the three position profiles against the torque-interface classical set (18 to 22 once the PD re-tuned through the profile joins it), winning hold, steps, the task family and the pick and losing the blocked family and the fast free-space families through their torque rate; keeping the teacher in the loop for three more iterations takes the blocked family in two of three seeds (23 of 33 rows pooled, through P1). A learned interface below the controller finds nothing under the model-based one: with the reference advanced over the bus delay and half the hold, the classical mapping is at the floor the servo's own loop sets. The torque rate every controller pays through a position interface is the interface's own, the held setpoint's staircase on a quantisation floor, not an assumption about the servo's velocity estimate that hardware would relax.</p>
+<p><strong>What changed since Checkpoint 2.</strong> A servo layer with four interface profiles and a model-based mapping; protocol v4 (a torque-tracking family, the pick with a grasp); the plant generalised to a second robot (the YAM) with the protocol's force scale set per robot; host-rate students at the host period with deeper trunks; a probing study with contact-geometry targets; a DC-motor layer under the servo law; and the blocked family at the host rate on the Panda diagnosed to the impact transient under payload, with the recipe varied in label space (section 6).</p>
+
+<h2>1. The question</h2>
+<p>Most arms a laboratory can buy are position-controlled: the host sends a goal, or an impedance frame, over a bus at 50 to 250 Hz, and a servo loop inside the motor holds it. The controller of Checkpoint 2 commands torque at 1 kHz. Milestone 11 asks what of it survives when the torque abstraction has to pass through such an interface, and what a learned controller should be on an arm of that kind: a learned interface that makes the servo behave like a torque source, the controller itself rebuilt at the host rate, or both. The advisor's framing: one controller per robot type, the learned controller as the torque-command interface, hardware not yet allowed, so everything is in simulation with the interface modelled from the drivers and the datasheets, and identified where public data allows.</p>
+
+<h2>2. The interface model</h2>
+<p>The plant takes a servo profile: how often the host may command, with what channels and resolution, how long the bus takes, and what the servo holds between frames. Every controller of the project exposes an impedance frame (goal position and velocity, gains, feedforward torque, cap); a torque command is the frame with zero gains, held with the servo's own spring. The model-based interface (the classical baseline) maps the frame to the profile's channels so that the servo's torque equals the commanded law at the frame's arrival: the reference advanced over the bus delay and half the hold (zero-order-hold compensation), the measured state predicted over the delay, the channels the profile lacks folded into the goal. The servo law runs at 1 kHz on the quantised measurement. On the Panda the servo's loop is abstracted as the tuned PD in torque units, so that the profiles change the interface and nothing else; on the YAM a DC-motor layer with randomised unknowns sits under the law for the robustness check.</p><table class="wide">
+<caption>The interface profiles (ADR 0011, decision 1). The servo law runs at 1 kHz on the quantised measurement with the frame held between host instants; the model-based interface folds the channels a profile lacks into the goal, with the reference advanced over the bus delay and half the hold.</caption>
+<thead>
+<tr><th>Profile</th><th>Modelled after</th><th>Host period</th><th>Bus delay</th><th>Command channels</th><th>Feedback</th></tr>
+</thead>
+<tbody>
+<tr><td>P0</td><td>the torque interface of reports 01 to 18</td><td>1 ms</td><td>0</td><td>torque</td><td>exact</td></tr>
+<tr><td>P1</td><td>MIT mode on CAN (DM4310/DM4340; the YAM)</td><td>4 ms</td><td>1 ms</td><td>position, velocity, Kp, Kd, feedforward torque per frame (16, 12, 12, 12, 12 bits)</td><td>position 16 bit per 25 rad, velocity 12 bit per 60 rad/s</td></tr>
+<tr><td>P2</td><td>Dynamixel X position mode (Koch, GELLO class)</td><td>10 ms</td><td>2 ms</td><td>goal position (4096 per turn), P and D gains in RAM, a current cap</td><td>position 1.53 mrad, velocity 24 mrad/s, current 2.69 mA</td></tr>
+<tr><td>P3</td><td>Feetech STS position mode (SO-101)</td><td>20 ms</td><td>3 ms</td><td>goal position (4096 per turn), a torque limit; gains fixed</td><td>position 1.53 mrad, velocity 77 mrad/s</td></tr>
+</tbody>
+</table>
+
+<h2>3. Protocol v4</h2>
+<p>Protocol v4 adds to v3 a torque-tracking family (holds, steps, chirps up to the host Nyquist rate, pure-torque chirps on the upper command; metrics: realised-torque error as a fraction of the stall torque, delay, bandwidth, saturation, torque rate) and the pick with a grasp: approach, descend over the block at a fixed opening, grasp (the weld activates only if the block's centre is inside the gap at the grasp instant), lift, carry, place; grasp success, the block's disturbance before the grasp and the place metrics. The force scale is set per robot (Panda cap 15 N, band 7 to 12 N; YAM cap 12 N, band 5 to 8 N); the families, splits, held-out groups and composites are those of v3, and the criterion is ADR 0010's through the interface: within 5% of the best classical controller of each family through the same profile, or better.</p>
+
+<h2>4. The classical set through the profiles (Panda)</h2>
+<p>The same classical controllers through the four profiles. Tracking and contact behaviour survive every profile (the realised contact stiffness within 3% of the torque interface's); smoothness does not (free-motion torque rate 115, 587, 1074 and 1710 Nm/s from P0 to P3). The torque-tracking family separates the profiles the way the bus does (0.4 to 1.3% of the stall torque at P1 with delays of 1 to 2 ms and bandwidth above 100 Hz; 2 to 3% at P2 and P3 with 2 to 10 ms and 10 to 49 Hz). The host period matters beyond 20 ms, the bus delay hardly up to 10 ms. The PD re-tuned through each profile halves its stiffness and trades accuracy for compliance and smoothness; the velocity-feedback filter sweep bounds the raw-velocity assumption at a tenth of the torque rate, and removing the interface's sources one at a time through P1 orders them: the hold and the bus delay first (587 to 263 Nm/s in free motion), the feedback quantisation second (to 186 with both gone, against 115 at the torque interface), the command channels' 12 bits last and only once the others are gone.</p><table class="wide">
+<caption>Best classical controller of the family: cap composite per family through each interface profile with the model-based interface (mean over 16 cases; in brackets the ratio to the torque interface; the best classical controller of each family in square brackets).</caption>
+<thead>
+<tr><th>Group</th><th>Family</th><th>P0 torque, 1 kHz</th><th>P1 MIT mode, 250 Hz</th><th>P2 goal position, RAM gains, 100 Hz</th><th>P3 goal position, fixed gains, 50 Hz</th></tr>
+</thead>
+<tbody>
+<tr><td>In-distribution families</td><td>Hold (10 N pulses)</td><td>1.74 [PD]</td><td>1.82 (1.04×) [PD]</td><td>2.13 (1.22×) [PD]</td><td>2.30 (1.32×) [PD]</td></tr>
+<tr><td>In-distribution families</td><td>Free motion</td><td>0.36 [PD+ff]</td><td>0.83 (2.31×) [PD+ff]</td><td>1.32 (3.68×) [PD+ff]</td><td>2.03 (5.64×) [PD+ff]</td></tr>
+<tr><td>In-distribution families</td><td>Policy-like targets</td><td>2.34 [PD]</td><td>2.35 (1.01×) [PD]</td><td>2.39 (1.02×) [PD]</td><td>2.38 (1.01×) [PD]</td></tr>
+<tr><td>In-distribution families</td><td>Step targets</td><td>3.30 [PD]</td><td>3.32 (1.01×) [PD]</td><td>3.45 (1.05×) [PD]</td><td>3.61 (1.10×) [PD]</td></tr>
+<tr><td>In-distribution families</td><td>Contact (press, slide)</td><td>5.13 [PD cap]</td><td>5.16 (1.01×) [PD cap]</td><td>5.33 (1.04×) [PD cap]</td><td>5.50 (1.07×) [PD cap]</td></tr>
+<tr><td>In-distribution families</td><td>Blocked target</td><td>10.43 [PD cap+ff]</td><td>10.56 (1.01×) [PD cap]</td><td>10.59 (1.02×) [PD cap+ff]</td><td>10.74 (1.03×) [PD cap+ff]</td></tr>
+<tr><td>In-distribution families</td><td>Task (held out)</td><td>4.34 [PD+ff]</td><td>4.43 (1.02×) [PD+ff]</td><td>4.55 (1.05×) [PD+ff]</td><td>4.75 (1.10×) [PD+ff]</td></tr>
+<tr><td>Task families (box pushing, pick-and-place)</td><td>Box pushing</td><td>0.64 [PD]</td><td>0.73 (1.14×) [PD cap]</td><td>0.79 (1.24×) [PD cap]</td><td>1.01 (1.59×) [PD]</td></tr>
+<tr><td>Task families (box pushing, pick-and-place)</td><td>Pick-and-place</td><td>4.57 [PD+ff]</td><td>4.64 (1.02×) [PD+ff]</td><td>4.77 (1.04×) [PD+ff]</td><td>4.91 (1.07×) [PD+ff]</td></tr>
+<tr><td>Compliant surface, 500 N/m (held out)</td><td>Contact (press, slide)</td><td>2.41 [PD cap+ff]</td><td>2.47 (1.03×) [PD cap+ff]</td><td>2.56 (1.06×) [PD cap+ff]</td><td>2.80 (1.16×) [PD cap+ff]</td></tr>
+<tr><td>Compliant surface, 500 N/m (held out)</td><td>Blocked target</td><td>6.52 [PD cap]</td><td>6.63 (1.02×) [PD cap]</td><td>6.75 (1.03×) [PD cap]</td><td>7.00 (1.07×) [PD cap]</td></tr>
+<tr><td>Compliant surface, 500 N/m (held out)</td><td>Task (held out)</td><td>2.70 [PD+ff]</td><td>2.81 (1.04×) [PD+ff]</td><td>2.93 (1.08×) [PD+ff]</td><td>3.09 (1.14×) [PD+ff]</td></tr>
+</tbody>
+</table><table>
+<caption>Torque-tracking family (protocol v4): the realised joint torque against the upper command evaluated at the true state at every physics step (RMS as a fraction of the stall torque), the feedforward PD plus a torque program through the model-based interface of each profile (P0 torque at 1 kHz; P1 MIT mode at 250 Hz; P2 goal position with RAM gains at 100 Hz; P3 goal position with fixed gains at 50 Hz); four cases per program kind: the PD frame alone (hold), steps of 10 to 30% of the stall torque on one joint, a chirp from 0.5 to 125 Hz at 10%, and the chirp as a pure torque command at 2%. The delay is the cross-correlation lag of the programmed joint; the bandwidth the chirp frequency at which the realised amplitude falls below 0.7 of the command.</caption>
+<thead>
+<tr><th>Profile</th><th>Program</th><th class="num">Torque error (% of stall)</th><th class="num">Delay (ms)</th><th class="num">Bandwidth (Hz)</th><th class="num">Saturation (%)</th><th class="num">Torque rate (Nm/s)</th><th class="num">Composite</th></tr>
+</thead>
+<tbody>
+<tr><td>P0</td><td>hold</td><td class="num">0.00</td><td class="num">—</td><td class="num">—</td><td class="num">0.0</td><td class="num">111</td><td class="num">0.04</td></tr>
+<tr><td>P0</td><td>steps</td><td class="num">0.00</td><td class="num">0</td><td class="num">—</td><td class="num">0.0</td><td class="num">468</td><td class="num">0.19</td></tr>
+<tr><td>P0</td><td>chirp</td><td class="num">0.00</td><td class="num">0</td><td class="num">125</td><td class="num">0.0</td><td class="num">373</td><td class="num">0.15</td></tr>
+<tr><td>P0</td><td>pure-torque chirp</td><td class="num">0.00</td><td class="num">0</td><td class="num">125</td><td class="num">0.0</td><td class="num">133</td><td class="num">0.05</td></tr>
+<tr><td>P1</td><td>hold</td><td class="num">0.43</td><td class="num">—</td><td class="num">—</td><td class="num">0.0</td><td class="num">156</td><td class="num">0.15</td></tr>
+<tr><td>P1</td><td>steps</td><td class="num">0.75</td><td class="num">1</td><td class="num">—</td><td class="num">0.0</td><td class="num">501</td><td class="num">0.45</td></tr>
+<tr><td>P1</td><td>chirp</td><td class="num">1.29</td><td class="num">2</td><td class="num">125</td><td class="num">0.0</td><td class="num">648</td><td class="num">0.72</td></tr>
+<tr><td>P1</td><td>pure-torque chirp</td><td class="num">0.57</td><td class="num">2</td><td class="num">106</td><td class="num">0.0</td><td class="num">228</td><td class="num">0.41</td></tr>
+<tr><td>P2</td><td>hold</td><td class="num">2.20</td><td class="num">—</td><td class="num">—</td><td class="num">0.0</td><td class="num">512</td><td class="num">0.64</td></tr>
+<tr><td>P2</td><td>steps</td><td class="num">2.17</td><td class="num">2</td><td class="num">—</td><td class="num">0.0</td><td class="num">675</td><td class="num">0.90</td></tr>
+<tr><td>P2</td><td>chirp</td><td class="num">2.53</td><td class="num">5</td><td class="num">30</td><td class="num">0.0</td><td class="num">696</td><td class="num">1.31</td></tr>
+<tr><td>P2</td><td>pure-torque chirp</td><td class="num">2.03</td><td class="num">4</td><td class="num">49</td><td class="num">0.0</td><td class="num">513</td><td class="num">0.96</td></tr>
+<tr><td>P3</td><td>hold</td><td class="num">2.29</td><td class="num">—</td><td class="num">—</td><td class="num">0.0</td><td class="num">494</td><td class="num">0.66</td></tr>
+<tr><td>P3</td><td>steps</td><td class="num">2.38</td><td class="num">3</td><td class="num">—</td><td class="num">0.0</td><td class="num">800</td><td class="num">1.10</td></tr>
+<tr><td>P3</td><td>chirp</td><td class="num">2.82</td><td class="num">10</td><td class="num">10</td><td class="num">0.0</td><td class="num">783</td><td class="num">1.85</td></tr>
+<tr><td>P3</td><td>pure-torque chirp</td><td class="num">2.09</td><td class="num">5</td><td class="num">29</td><td class="num">0.0</td><td class="num">588</td><td class="num">1.13</td></tr>
+</tbody>
+</table><figure id="fig-sweep" class="wide">
+<img src="figures/sweep.svg" alt="Host period and bus delay (the P2 structure, the feedforward PD): the composites per family over the period at a 2 ms delay and over the delay at a 10 ms period. The hold matters beyond 20 ms, the delay hardly up to 10 ms.">
+<figcaption>Host period and bus delay (the P2 structure, the feedforward PD): the composites per family over the period at a 2 ms delay and over the delay at a 10 ms period. The hold matters beyond 20 ms, the delay hardly up to 10 ms.</figcaption>
+</figure><table class="wide">
+<caption>Blocked family: contact stiffness (N/m, mean normal force per metre of actual tool error while the reference is inside the surface) and the excess force above the 15 N cap, per profile; the ratio to the torque interface is the realised fraction of the commanded impedance.</caption>
+<thead>
+<tr><th>Controller</th><th>P0 torque, 1 kHz</th><th>P1 MIT mode, 250 Hz</th><th>P2 goal position, RAM gains, 100 Hz</th><th>P3 goal position, fixed gains, 50 Hz</th></tr>
+</thead>
+<tbody>
+<tr><td>PD (tracking-tuned) + inverse-dynamics feedforward</td><td>1421 (1.00×), 39.5 N above the cap</td><td>1424 (1.00×), 39.6 N above the cap</td><td>1423 (1.00×), 39.6 N above the cap</td><td>1431 (1.01×), 39.8 N above the cap</td></tr>
+<tr><td>Oracle around the PD (privileged ceiling)</td><td>726 (1.00×), 12.7 N above the cap</td><td>722 (0.99×), 12.7 N above the cap</td><td>411 (0.57×), 2.9 N above the cap</td><td>412 (0.57×), 3.3 N above the cap</td></tr>
+</tbody>
+</table><table class="wide">
+<caption>The feedforward PD with the torque-interface gains and with the gains re-tuned through each profile (CMA-ES on the cap composite, 40 iterations of 12, the Milestone 9 budget), both through the profile's servo loop with the model-based interface and the servo's nominal spring set to the same gains; cap composites per family (in distribution, 16 cases each) and the free-motion and blocked columns the criterion turns on.</caption>
+<thead>
+<tr><th>Profile</th><th>Gains</th><th>Stiffness (geometric mean ratio)</th><th>Hold (10 N pulses)</th><th>Free motion</th><th>Policy-like targets</th><th>Step targets</th><th>Contact (press, slide)</th><th>Blocked target</th><th>Push / pick</th><th>Free-motion RMSE (mrad)</th><th>Free-motion torque rate (Nm/s)</th><th>Blocked excess above the cap (N)</th><th>Blocked contact stiffness (N/m)</th></tr>
+</thead>
+<tbody>
+<tr><td>P1 MIT mode, 250 Hz</td><td>torque-interface gains (PD+ff)</td><td>1.00×</td><td>1.82</td><td>0.83</td><td>2.35</td><td>3.32</td><td>5.52</td><td>14.15</td><td>0.86 / 4.64</td><td>4.9</td><td>587</td><td>39.6</td><td>1424</td></tr>
+<tr><td>P1 MIT mode, 250 Hz</td><td>re-tuned through the profile (PD+ff)</td><td>0.52×</td><td>3.20</td><td>0.86</td><td>2.14</td><td>3.67</td><td>5.45</td><td>9.68</td><td>0.90 / 5.84</td><td>10.4</td><td>338</td><td>20.1</td><td>930</td></tr>
+<tr><td>P2 goal position, RAM gains, 100 Hz</td><td>torque-interface gains (PD+ff)</td><td>1.00×</td><td>2.13</td><td>1.32</td><td>2.39</td><td>3.45</td><td>5.67</td><td>14.17</td><td>1.05 / 4.77</td><td>5.0</td><td>1074</td><td>39.6</td><td>1423</td></tr>
+<tr><td>P2 goal position, RAM gains, 100 Hz</td><td>re-tuned through the profile (PD+ff)</td><td>0.48×</td><td>3.44</td><td>1.08</td><td>2.04</td><td>3.69</td><td>5.52</td><td>9.69</td><td>1.09 / 5.89</td><td>10.5</td><td>550</td><td>20.0</td><td>923</td></tr>
+<tr><td>P3 goal position, fixed gains, 50 Hz</td><td>torque-interface gains (PD+ff)</td><td>1.00×</td><td>2.30</td><td>2.03</td><td>2.38</td><td>3.61</td><td>5.94</td><td>14.15</td><td>1.15 / 4.91</td><td>6.4</td><td>1710</td><td>39.8</td><td>1431</td></tr>
+<tr><td>P3 goal position, fixed gains, 50 Hz</td><td>re-tuned through the profile (PD+ff)</td><td>0.47×</td><td>3.97</td><td>1.32</td><td>1.94</td><td>3.93</td><td>5.70</td><td>9.01</td><td>0.99 / 6.01</td><td>12.3</td><td>706</td><td>17.6</td><td>873</td></tr>
+</tbody>
+</table><table class="wide">
+<caption>Through P1 with the servo damping on the raw quantised velocity feedback (raw) and on a first-order filtered estimate (time constant 2, 5 and 10 ms; the host sees the same estimate): torque rate and tracking on the free-space families, the blocked family's excess force above the 15 N cap, and the cap composites (in distribution, 16 cases per family); the torque-tracking error of the feedforward PD with the torque program (mean over the four program kinds).</caption>
+<thead>
+<tr><th>Velocity filter</th><th>Controller</th><th>Torque rate, free motion (Nm/s)</th><th>Torque rate, policy-like (Nm/s)</th><th>Free-motion RMSE (mrad)</th><th>Hold</th><th>Free</th><th>Policy</th><th>Step</th><th>Blocked excess (N)</th><th>Blocked</th><th>Press-slide</th><th>Torque error (% of stall)</th></tr>
+</thead>
+<tbody>
+<tr><td>raw</td><td>PD + feedforward</td><td>587</td><td>3709</td><td>4.9</td><td>1.82</td><td>0.83</td><td>2.35</td><td>3.32</td><td>39.6</td><td>14.15</td><td>5.52</td><td>0.76</td></tr>
+<tr><td>raw</td><td>Oracle around the PD</td><td>599</td><td>3709</td><td>8.9</td><td>1.82</td><td>1.05</td><td>2.35</td><td>3.32</td><td>12.7</td><td>7.41</td><td>5.30</td><td>—</td></tr>
+<tr><td>raw</td><td>Host-rate student</td><td>715</td><td>4107</td><td>2.9</td><td>0.86</td><td>0.86</td><td>2.46</td><td>2.51</td><td>23.5</td><td>11.74</td><td>4.54</td><td>—</td></tr>
+<tr><td>2 ms</td><td>PD + feedforward</td><td>540</td><td>3701</td><td>4.9</td><td>1.78</td><td>0.78</td><td>2.35</td><td>3.31</td><td>39.6</td><td>14.07</td><td>5.46</td><td>0.78</td></tr>
+<tr><td>2 ms</td><td>Oracle around the PD</td><td>545</td><td>3701</td><td>8.8</td><td>1.78</td><td>0.99</td><td>2.35</td><td>3.31</td><td>12.7</td><td>7.31</td><td>5.26</td><td>—</td></tr>
+<tr><td>2 ms</td><td>Host-rate student</td><td>661</td><td>4143</td><td>2.9</td><td>0.82</td><td>0.80</td><td>2.47</td><td>2.51</td><td>23.3</td><td>11.67</td><td>4.50</td><td>—</td></tr>
+<tr><td>5 ms</td><td>PD + feedforward</td><td>533</td><td>3697</td><td>4.9</td><td>1.78</td><td>0.78</td><td>2.35</td><td>3.30</td><td>39.6</td><td>13.99</td><td>5.41</td><td>0.88</td></tr>
+<tr><td>5 ms</td><td>Oracle around the PD</td><td>537</td><td>3697</td><td>8.7</td><td>1.78</td><td>0.97</td><td>2.35</td><td>3.30</td><td>12.6</td><td>7.20</td><td>5.21</td><td>—</td></tr>
+<tr><td>5 ms</td><td>Host-rate student</td><td>663</td><td>4204</td><td>2.9</td><td>0.82</td><td>0.81</td><td>2.50</td><td>2.51</td><td>23.1</td><td>11.58</td><td>4.46</td><td>—</td></tr>
+<tr><td>10 ms</td><td>PD + feedforward</td><td>531</td><td>3727</td><td>4.8</td><td>1.78</td><td>0.77</td><td>2.36</td><td>3.33</td><td>39.5</td><td>13.90</td><td>5.42</td><td>1.12</td></tr>
+<tr><td>10 ms</td><td>Oracle around the PD</td><td>535</td><td>3727</td><td>8.4</td><td>1.78</td><td>0.96</td><td>2.36</td><td>3.33</td><td>12.5</td><td>7.04</td><td>5.08</td><td>—</td></tr>
+<tr><td>10 ms</td><td>Host-rate student</td><td>730</td><td>4372</td><td>3.2</td><td>0.82</td><td>0.89</td><td>2.57</td><td>2.54</td><td>22.8</td><td>11.43</td><td>4.42</td><td>—</td></tr>
+</tbody>
+</table>
+
+<h2>5. The learned interface</h2>
+<p>A network per profile that takes the upper frame and the proprioceptive history at the host rate and emits bounded corrections on the channels the profile has (a goal offset, gain multipliers where writable, a feedforward residual), trained by backpropagation through the plant on the torque-tracking family against the realised torque at every physics step. On no profile does it halve the model-based interface's error (criterion i). The error-floor decomposition explains why: with the reference advanced to the middle of the hold, the model-based interface is at the floor the servo's own loop sets between frames (removing the hold and the delay together leaves 0.5% at P1, from the feedback and command quantisation); a scan of constant corrections finds nothing below it either. The lesson is a modelling one: the first version of the mapping did not advance the reference over the delay, and the learned interface's apparent gains in that version were the model's omission.</p><table class="wide">
+<caption>Learned interface (Phase 2a) on the validation cases (8 torque-tracking, hold, free and blocked under the feedforward PD): the mean cap composite and the torque-tracking metrics of the model-based warm start and of the best checkpoint by validation; the pre-registered criterion asks for an error ratio of 0.5 at a rate ratio below 1.5.</caption>
+<thead>
+<tr><th>Profile</th><th>Training</th><th>Model-based interface: validation mean; torque error / delay / rate</th><th>Best learned checkpoint</th><th>Error ratio</th><th>Rate ratio</th></tr>
+</thead>
+<tbody>
+<tr><td>P1 MIT mode, 250 Hz</td><td>rate weight 3e-4</td><td>2.75; 0.71% / 2 ms / 284 Nm/s</td><td>2.72; 1.18% / 2 ms / 234 Nm/s</td><td>1.66</td><td>0.82</td></tr>
+<tr><td>P2 goal position, RAM gains, 100 Hz</td><td>rate weight 3e-4</td><td>3.10; 1.98% / 4 ms / 637 Nm/s</td><td>3.07; 3.37% / 4 ms / 511 Nm/s</td><td>1.71</td><td>0.80</td></tr>
+<tr><td>P3 goal position, fixed gains, 50 Hz</td><td>rate weight 3e-4</td><td>3.70; 2.14% / 6 ms / 744 Nm/s</td><td>3.63; 2.31% / 6 ms / 751 Nm/s</td><td>1.08</td><td>1.01</td></tr>
+</tbody>
+</table>
+
+<h2>6. The host-rate students (Panda)</h2>
+<figure id="fig-hero" class="wide">
+<img src="figures/hero.svg" alt="The across-the-board criterion (ADR 0010, through the interface in ADR 0011): rows of the family-and-group table on which a learned controller is within 5% of the best classical controller of that family, or better. The torque-interface student of Milestone 10 for reference; the host-rate students of Milestone 11 against the classical set through the same profile, the re-tuned PD included where it was evaluated; the YAM student through its own interface, with and without the randomised DC-motor layer.">
+<figcaption>The across-the-board criterion (ADR 0010, through the interface in ADR 0011): rows of the family-and-group table on which a learned controller is within 5% of the best classical controller of that family, or better. The torque-interface student of Milestone 10 for reference; the host-rate students of Milestone 11 against the classical set through the same profile, the re-tuned PD included where it was evaluated; the YAM student through its own interface, with and without the randomised DC-motor layer.</figcaption>
+</figure><p>A fresh gain-residual network per profile (four layers of 256; a history of 100 ms at the host rate; the external-torque estimate; the feedforward PD base), distilled by DAgger through the profile from the ideal-robot labels in free space and the oracle in contact, deciding once per host frame with no compute latency and the bus delay kept. Through P1, P2 and P3 the students meet 25, 24 and 26 of 33 rows against the torque-interface classical set through the same profile, and 21, 22 and 18 once the PD re-tuned through the profile joins it: they win hold (1.3 to 1.5 against 8.2 mrad), steps, the task family and the pick (14 to 16 of 16 grasps against 7), keep free motion within 3 to 7%, and miss the blocked family and the fast free-space families through their torque rate. No training or evaluation episode diverged through any profile (an earlier reading to the contrary was an artefact of a flag, corrected in report 21's erratum).</p><table class="wide">
+<caption>The Panda through P1: the host-rate students against the best classical controller through the same profile (the two tuned PDs, their feedforward variants and the PD re-tuned through the profile).</caption>
+<thead>
+<tr><th>Group</th><th>Family</th><th>Best classical (cap composite)</th><th>distill_host_p1</th><th>distill_host_p1_beta</th><th>distill_host_p1_beta_l8</th></tr>
+</thead>
+<tbody>
+<tr><td>In-distribution families</td><td>Blocked target</td><td>pd_retuned (9.68)</td><td>11.74 (+21%) ✗</td><td>9.90 (+2%)</td><td>14.15 (+46%) ✗</td></tr>
+<tr><td>In-distribution families</td><td>Contact (press, slide)</td><td>PD tuned on the cap composite (5.16)</td><td>4.54 (-12%)</td><td>5.30 (+3%)</td><td>5.56 (+8%) ✗</td></tr>
+<tr><td>In-distribution families</td><td>Free motion</td><td>PD (tracking-tuned) + inverse-dynamics feedforward (0.83)</td><td>0.86 (+3%)</td><td>0.84 (+1%)</td><td>0.83 (+0%)</td></tr>
+<tr><td>In-distribution families</td><td>Hold (10 N pulses)</td><td>PD tuned on the tracking composite (1.82)</td><td>0.86 (-53%)</td><td>0.82 (-55%)</td><td>1.83 (+1%)</td></tr>
+<tr><td>In-distribution families</td><td>Policy-like targets</td><td>pd_retuned (2.14)</td><td>2.46 (+15%) ✗</td><td>2.45 (+15%) ✗</td><td>2.36 (+10%) ✗</td></tr>
+<tr><td>In-distribution families</td><td>Step targets</td><td>PD tuned on the tracking composite (3.32)</td><td>2.51 (-24%)</td><td>2.49 (-25%)</td><td>3.32 (+0%)</td></tr>
+<tr><td>In-distribution families</td><td>Task (held out)</td><td>PD (tracking-tuned) + inverse-dynamics feedforward (4.43)</td><td>3.35 (-24%)</td><td>4.32 (-3%)</td><td>4.45 (+0%)</td></tr>
+<tr><td>Held-out workspace (base yaw 1.2 to 2.6 rad)</td><td>Free motion</td><td>PD (tracking-tuned) + inverse-dynamics feedforward (0.97)</td><td>0.82 (-15%)</td><td>0.78 (-20%)</td><td>0.97 (-0%)</td></tr>
+<tr><td>Held-out workspace (base yaw 1.2 to 2.6 rad)</td><td>Policy-like targets</td><td>pd_retuned (2.14)</td><td>2.59 (+21%) ✗</td><td>2.61 (+22%) ✗</td><td>2.44 (+14%) ✗</td></tr>
+<tr><td>Speed x1.5</td><td>Contact (press, slide)</td><td>PD tuned on the cap composite (6.32)</td><td>5.81 (-8%)</td><td>6.20 (-2%)</td><td>6.88 (+9%) ✗</td></tr>
+<tr><td>Speed x1.5</td><td>Free motion</td><td>pd_retuned (1.08)</td><td>1.31 (+21%) ✗</td><td>1.30 (+20%) ✗</td><td>1.18 (+9%) ✗</td></tr>
+<tr><td>Speed x1.5</td><td>Policy-like targets</td><td>pd_retuned (2.72)</td><td>2.92 (+7%) ✗</td><td>2.94 (+8%) ✗</td><td>2.82 (+4%)</td></tr>
+<tr><td>Speed x1.5</td><td>Task (held out)</td><td>PD (tracking-tuned) + inverse-dynamics feedforward (5.06)</td><td>3.97 (-22%)</td><td>4.92 (-3%)</td><td>4.99 (-1%)</td></tr>
+<tr><td>Speed x2</td><td>Contact (press, slide)</td><td>PD tuned on the cap composite (7.00)</td><td>6.60 (-6%)</td><td>6.99 (-0%)</td><td>7.84 (+12%) ✗</td></tr>
+<tr><td>Speed x2</td><td>Free motion</td><td>pd_retuned (1.36)</td><td>1.80 (+32%) ✗</td><td>1.75 (+28%) ✗</td><td>1.56 (+14%) ✗</td></tr>
+<tr><td>Speed x2</td><td>Policy-like targets</td><td>pd_retuned (3.08)</td><td>3.35 (+9%) ✗</td><td>3.45 (+12%) ✗</td><td>3.27 (+6%) ✗</td></tr>
+<tr><td>Speed x2</td><td>Task (held out)</td><td>PD (tracking-tuned) + inverse-dynamics feedforward (6.01)</td><td>4.78 (-20%)</td><td>5.27 (-12%)</td><td>6.01 (+0%)</td></tr>
+<tr><td>Payload 3 kg</td><td>Blocked target</td><td>pd_retuned (14.71)</td><td>24.43 (+66%) ✗</td><td>19.81 (+35%) ✗</td><td>19.27 (+31%) ✗</td></tr>
+<tr><td>Payload 3 kg</td><td>Contact (press, slide)</td><td>PD tuned on the cap composite (8.31)</td><td>6.61 (-21%)</td><td>7.61 (-8%)</td><td>8.59 (+3%)</td></tr>
+<tr><td>Payload 3 kg</td><td>Free motion</td><td>PD (tracking-tuned) + inverse-dynamics feedforward (1.67)</td><td>1.08 (-35%)</td><td>1.10 (-34%)</td><td>1.67 (-0%)</td></tr>
+<tr><td>Payload 3 kg</td><td>Task (held out)</td><td>PD (cap-tuned) + inverse-dynamics feedforward (8.35)</td><td>5.72 (-32%)</td><td>7.65 (-8%)</td><td>8.83 (+6%) ✗</td></tr>
+<tr><td>Held-out robot instances (doubled deviations)</td><td>Blocked target</td><td>pd_retuned (10.10)</td><td>13.67 (+35%) ✗</td><td>11.99 (+19%) ✗</td><td>14.55 (+44%) ✗</td></tr>
+<tr><td>Held-out robot instances (doubled deviations)</td><td>Contact (press, slide)</td><td>PD tuned on the cap composite (5.35)</td><td>4.52 (-16%)</td><td>5.30 (-1%)</td><td>5.65 (+6%) ✗</td></tr>
+<tr><td>Held-out robot instances (doubled deviations)</td><td>Free motion</td><td>PD (tracking-tuned) + inverse-dynamics feedforward (0.96)</td><td>0.94 (-2%)</td><td>0.94 (-1%)</td><td>0.95 (-0%)</td></tr>
+<tr><td>Held-out robot instances (doubled deviations)</td><td>Policy-like targets</td><td>pd_retuned (2.33)</td><td>2.58 (+11%) ✗</td><td>2.60 (+12%) ✗</td><td>2.51 (+8%) ✗</td></tr>
+<tr><td>Compliant surface, 2 kN/m (held out)</td><td>Blocked target</td><td>pd_retuned (8.28)</td><td>9.58 (+16%) ✗</td><td>8.75 (+6%) ✗</td><td>12.40 (+50%) ✗</td></tr>
+<tr><td>Compliant surface, 2 kN/m (held out)</td><td>Contact (press, slide)</td><td>PD (cap-tuned) + inverse-dynamics feedforward (3.21)</td><td>2.13 (-34%)</td><td>3.23 (+1%)</td><td>3.49 (+9%) ✗</td></tr>
+<tr><td>Compliant surface, 2 kN/m (held out)</td><td>Task (held out)</td><td>pd_retuned (3.38)</td><td>1.97 (-42%)</td><td>3.30 (-3%)</td><td>3.56 (+5%) ✗</td></tr>
+<tr><td>Compliant surface, 500 N/m (held out)</td><td>Blocked target</td><td>PD tuned on the cap composite (6.63)</td><td>7.43 (+12%) ✗</td><td>6.27 (-6%)</td><td>8.70 (+31%) ✗</td></tr>
+<tr><td>Compliant surface, 500 N/m (held out)</td><td>Contact (press, slide)</td><td>PD (cap-tuned) + inverse-dynamics feedforward (2.47)</td><td>1.60 (-35%)</td><td>2.36 (-5%)</td><td>2.59 (+5%)</td></tr>
+<tr><td>Compliant surface, 500 N/m (held out)</td><td>Task (held out)</td><td>PD (tracking-tuned) + inverse-dynamics feedforward (2.81)</td><td>1.43 (-49%)</td><td>2.37 (-16%)</td><td>2.83 (+1%)</td></tr>
+<tr><td>Task families (box pushing, pick-and-place)</td><td>Pick-and-place</td><td>PD (tracking-tuned) + inverse-dynamics feedforward (4.64)</td><td>0.67 (-86%)</td><td>0.70 (-85%)</td><td>4.99 (+7%) ✗</td></tr>
+<tr><td>Task families (box pushing, pick-and-place)</td><td>Box pushing</td><td>PD tuned on the cap composite (0.73)</td><td>0.73 (+1%)</td><td>0.76 (+4%)</td><td>0.86 (+18%) ✗</td></tr>
+<tr><td>All</td><td>families and groups</td><td>met / total</td><td>21 / 33</td><td>23 / 33</td><td>13 / 33</td></tr>
+</tbody>
+</table><p><strong>The blocked family at the host rate.</strong> The P1 student presses 23.5 N above the cap where the oracle through the same profile presses 12.7. Three diagnostics without training locate the miss. The label fit along the student's own episodes is good (a 2.4 Nm RMS error on a 16 Nm RMS yield in the blocked phase, correlation 0.98) and unbiased along the contact normal (a push error of 0.4 N mean, 7 N RMS), so the regression is not under-fitting the contact labels. The blocked phase in time (the table below) shows where the excess is: in the first half second after the impact (54% of it) and in the payload cases (7.0, 11.9 and 33.8 N at 0, 1 and 2 kg against the oracle's 7.9, 8.2 and 11.4; the student's steady press in the last half second is 16.3 N against the oracle's 14.0). The oracle knows the payload and compensates its weight along the normal; the student has to infer it, and the probes find the payload not linearly decodable from any layer. Weighting the contact rows three times made the family worse at every iteration (the selected checkpoint was the warm start), neutral weights were worse than the recipe, and the force-space label term dominated the regression and never validated below the PD. Keeping the teacher driving half the episodes for three more iterations did it: blocked 8.28 against the recipe's 11.74 (the oracle 7.41), every blocked row of every group 6 to 15% better than the best classical controller, hold and free motion kept, and 25 of 33 rows against the classical set with the re-tuned PD (the recipe 21). It falls short of the pre-registered excess target (19.7 against the oracle's 12.7 N above the cap) and loses the policy-like family and the fast free motion to the re-tuned PD through its torque rate. Over three seeds the effect holds in two (blocked 8.28, 10.14 and 11.27 against the recipe's 11.74) and the pooled variant meets 23 of 33 rows, so the blocked family at the host rate is improved on average and not settled; an eight-layer form of the same recipe never validated below the PD with this budget.</p><table class="wide">
+<caption>The sixteen in-distribution blocked test cases through P1: the normal force over the phase in which the reference is inside the surface, split into its first 0.5 s after the nominal contact, its middle and its last 0.5 s; the excess above the cap and where it falls; the time from the nominal contact until the force first stays under the cap for 0.2 s; the excess per evaluation payload.</caption>
+<thead>
+<tr><th>Controller</th><th>Mean force in the blocked phase (N)</th><th>Peak (N)</th><th>Mean force, first 0.5 s / middle / last 0.5 s (N)</th><th>Excess above 15 N (N)</th><th>Share of the excess, first 0.5 s / middle / last (%)</th><th>Time to settle under the cap (s)</th><th>Excess by payload, 0 / 1 / 2 kg (N)</th></tr>
+</thead>
+<tbody>
+<tr><td>PD (tracking-tuned) + inverse-dynamics feedforward</td><td>49.9</td><td>124</td><td>57.5 / 59.9 / 23.1</td><td>36.2</td><td>33 / 57 / 10</td><td>1.55</td><td>22.7 / 28.2 / 47.6</td></tr>
+<tr><td>Oracle around the PD (privileged ceiling)</td><td>23.3</td><td>102</td><td>22.5 / 28.8 / 14.0</td><td>9.7</td><td>31 / 61 / 8</td><td>1.32</td><td>7.9 / 8.2 / 11.4</td></tr>
+<tr><td>student_p1</td><td>34.5</td><td>185</td><td>54.9 / 34.0 / 16.3</td><td>21.3</td><td>54 / 38 / 7</td><td>0.42</td><td>7.0 / 11.9 / 33.8</td></tr>
+</tbody>
+</table><table class="wide">
+<caption>The P1 host-rate student's recipe varied (ADR 0011 amendment 3, item 2; one seed each): the label weights of the free-space and contact rows, the teacher's share of the collection episodes per iteration (the last value repeats), and the force-space label term (the force along the surface normal the torque error implies, per the 15 N cap). Checkpoints selected on the 32 validation cases; in-distribution cap composites (16 cases per family); the criterion count over every group and family against the best classical controller through P1, the re-tuned PD included.</caption>
+<thead>
+<tr><th>Recipe</th><th>Selected iteration</th><th>Validation</th><th>Hold</th><th>Free</th><th>Policy</th><th>Step</th><th>Press-slide</th><th>Blocked</th><th>Blocked excess above the cap (N)</th><th>Press force, sliding family (N)</th><th>Free-motion torque rate (Nm/s)</th><th>Criterion rows within 5%</th></tr>
+</thead>
+<tbody>
+<tr><td>free 3, contact 1, teacher share 1,0, force term 0, 4 layers, seed 0</td><td>10</td><td>3.45</td><td>0.86</td><td>0.86</td><td>2.46</td><td>2.51</td><td>4.54</td><td>11.74</td><td>23.5</td><td>17.0</td><td>715</td><td>21 / 33</td></tr>
+<tr><td>free 1, contact 3, teacher share 1,0, force term 0, 4 layers, seed 0</td><td>-1</td><td>4.21</td><td>1.83</td><td>0.83</td><td>2.35</td><td>3.32</td><td>5.55</td><td>14.14</td><td>39.6</td><td>21.4</td><td>586</td><td>15 / 33</td></tr>
+<tr><td>free 1, contact 1, teacher share 1,0, force term 0, 4 layers, seed 0</td><td>7</td><td>3.79</td><td>0.79</td><td>0.90</td><td>2.51</td><td>2.46</td><td>5.69</td><td>11.20</td><td>25.3</td><td>22.2</td><td>770</td><td>9 / 33</td></tr>
+<tr><td>free 3, contact 1, teacher share 1,0.5,0.5,0.5,0, force term 0, 4 layers, seed 0</td><td>10</td><td>3.28</td><td>0.92</td><td>0.84</td><td>2.38</td><td>2.54</td><td>5.20</td><td>8.28</td><td>19.7</td><td>21.9</td><td>720</td><td>25 / 33</td></tr>
+<tr><td>Oracle around the PD through P1 (the teacher in contact)</td><td>—</td><td>—</td><td>1.82</td><td>1.05</td><td>2.35</td><td>3.32</td><td>5.30</td><td>7.41</td><td>12.7</td><td>9.7</td><td>599</td><td>—</td></tr>
+<tr><td>free 3, contact 1, teacher share 1,0.5,0.5,0.5,0, force term 0, 8 layers, seed 0</td><td>-1</td><td>4.21</td><td>1.83</td><td>0.83</td><td>2.36</td><td>3.32</td><td>5.56</td><td>14.15</td><td>39.8</td><td>21.5</td><td>587</td><td>13 / 33</td></tr>
+</tbody>
+</table>
+
+<h2>7. The YAM</h2>
+<p>The Menagerie YAM with its gripper baked into the tool body, torque motors at the DM motors' peak torques, the environment scaled to its reach, protocol v4 at its force scale. The shipped driver gains are a teleoperation setting (30 mrad on hold, 15 N above the cap); the CMA-ES re-tune through the interface halves the free-motion error and brings the press into the band. The host-rate student distilled from scratch through P1 (four layers of 256, one seed, selected at its third iteration) meets the criterion on 32 of 33 rows: hold 4 against 14 mrad, free motion at parity, blocked 5.1 against 9.5 N above the 12 N cap, 16 of 16 grasps against 9; the miss is blocked on the 500 N/m surface through its torque rate. Under the randomised DC-motor layer (torque-constant error ±15%, voltage envelope, friction, current-loop lag up to 2 ms, 12-bit torque feedback) it keeps every one of the 16 evaluated rows, and the layer's lag smooths every controller by about 40%.</p><table class="wide">
+<caption>The YAM through P1: the student against the best classical controller of each family and group (the shipped gains with and without the feedforward, the re-tuned PD), ADR 0011 criterion (iv), one seed.</caption>
+<thead>
+<tr><th>Group</th><th>Family</th><th>Best classical (cap composite)</th><th>distill_yam_p1</th></tr>
+</thead>
+<tbody>
+<tr><td>In-distribution families</td><td>Blocked target</td><td>PD tuned on the tracking composite (5.19)</td><td>3.38 (-35%)</td></tr>
+<tr><td>In-distribution families</td><td>Contact (press, slide)</td><td>PD tuned on the tracking composite (1.29)</td><td>1.08 (-17%)</td></tr>
+<tr><td>In-distribution families</td><td>Free motion</td><td>PD tuned on the tracking composite (1.77)</td><td>1.79 (+1%)</td></tr>
+<tr><td>In-distribution families</td><td>Hold (10 N pulses)</td><td>PD tuned on the tracking composite (2.69)</td><td>1.01 (-62%)</td></tr>
+<tr><td>In-distribution families</td><td>Policy-like targets</td><td>PD tuned on the tracking composite (2.30)</td><td>2.30 (-0%)</td></tr>
+<tr><td>In-distribution families</td><td>Step targets</td><td>PD tuned on the tracking composite (3.06)</td><td>2.06 (-33%)</td></tr>
+<tr><td>In-distribution families</td><td>Task (held out)</td><td>PD tuned on the tracking composite (1.92)</td><td>1.00 (-48%)</td></tr>
+<tr><td>Held-out workspace (base yaw 1.2 to 2.6 rad)</td><td>Free motion</td><td>PD tuned on the tracking composite (2.09)</td><td>1.70 (-19%)</td></tr>
+<tr><td>Held-out workspace (base yaw 1.2 to 2.6 rad)</td><td>Policy-like targets</td><td>PD tuned on the tracking composite (2.89)</td><td>2.98 (+3%)</td></tr>
+<tr><td>Speed x1.5</td><td>Contact (press, slide)</td><td>PD tuned on the tracking composite (1.63)</td><td>1.34 (-18%)</td></tr>
+<tr><td>Speed x1.5</td><td>Free motion</td><td>PD tuned on the tracking composite (2.08)</td><td>2.07 (-0%)</td></tr>
+<tr><td>Speed x1.5</td><td>Policy-like targets</td><td>PD tuned on the tracking composite (2.46)</td><td>2.46 (+0%)</td></tr>
+<tr><td>Speed x1.5</td><td>Task (held out)</td><td>PD tuned on the tracking composite (1.95)</td><td>1.28 (-34%)</td></tr>
+<tr><td>Speed x2</td><td>Contact (press, slide)</td><td>PD tuned on the tracking composite (1.90)</td><td>1.51 (-20%)</td></tr>
+<tr><td>Speed x2</td><td>Free motion</td><td>PD tuned on the tracking composite (2.08)</td><td>2.07 (-0%)</td></tr>
+<tr><td>Speed x2</td><td>Policy-like targets</td><td>PD tuned on the tracking composite (2.47)</td><td>2.47 (+0%)</td></tr>
+<tr><td>Speed x2</td><td>Task (held out)</td><td>PD (tracking-tuned) + inverse-dynamics feedforward (2.23)</td><td>1.59 (-29%)</td></tr>
+<tr><td>payload_1.5kg</td><td>Blocked target</td><td>PD tuned on the tracking composite (8.36)</td><td>5.13 (-39%)</td></tr>
+<tr><td>payload_1.5kg</td><td>Contact (press, slide)</td><td>PD tuned on the tracking composite (3.05)</td><td>2.15 (-30%)</td></tr>
+<tr><td>payload_1.5kg</td><td>Free motion</td><td>PD tuned on the tracking composite (4.16)</td><td>3.73 (-10%)</td></tr>
+<tr><td>payload_1.5kg</td><td>Task (held out)</td><td>PD tuned on the tracking composite (4.49)</td><td>2.43 (-46%)</td></tr>
+<tr><td>Held-out robot instances (doubled deviations)</td><td>Blocked target</td><td>PD tuned on the tracking composite (5.17)</td><td>3.21 (-38%)</td></tr>
+<tr><td>Held-out robot instances (doubled deviations)</td><td>Contact (press, slide)</td><td>PD tuned on the tracking composite (1.38)</td><td>1.16 (-16%)</td></tr>
+<tr><td>Held-out robot instances (doubled deviations)</td><td>Free motion</td><td>PD tuned on the tracking composite (1.99)</td><td>1.99 (-0%)</td></tr>
+<tr><td>Held-out robot instances (doubled deviations)</td><td>Policy-like targets</td><td>PD tuned on the tracking composite (2.35)</td><td>2.37 (+1%)</td></tr>
+<tr><td>Compliant surface, 2 kN/m (held out)</td><td>Blocked target</td><td>pd_shipped (2.81)</td><td>2.39 (-15%)</td></tr>
+<tr><td>Compliant surface, 2 kN/m (held out)</td><td>Contact (press, slide)</td><td>PD tuned on the tracking composite (1.08)</td><td>0.93 (-14%)</td></tr>
+<tr><td>Compliant surface, 2 kN/m (held out)</td><td>Task (held out)</td><td>PD tuned on the tracking composite (1.47)</td><td>0.77 (-48%)</td></tr>
+<tr><td>Compliant surface, 500 N/m (held out)</td><td>Blocked target</td><td>pd_shipped (2.16)</td><td>2.63 (+22%) ✗</td></tr>
+<tr><td>Compliant surface, 500 N/m (held out)</td><td>Contact (press, slide)</td><td>PD (tracking-tuned) + inverse-dynamics feedforward (1.22)</td><td>1.08 (-12%)</td></tr>
+<tr><td>Compliant surface, 500 N/m (held out)</td><td>Task (held out)</td><td>PD tuned on the tracking composite (1.44)</td><td>0.69 (-52%)</td></tr>
+<tr><td>Task families (box pushing, pick-and-place)</td><td>Pick-and-place</td><td>PD tuned on the tracking composite (4.18)</td><td>0.71 (-83%)</td></tr>
+<tr><td>Task families (box pushing, pick-and-place)</td><td>Box pushing</td><td>PD tuned on the tracking composite (0.59)</td><td>0.59 (-1%)</td></tr>
+<tr><td>All</td><td>families and groups</td><td>met / total</td><td>32 / 33</td></tr>
+</tbody>
+</table><table class="wide">
+<caption>Cap composites without → with the DC-motor layer under the servo law (the layer's unknowns drawn per case: torque-constant error ±15%, voltage envelope, viscous and Coulomb friction, current-loop lag up to 2 ms, torque-feedback resolution); the same cases, the same controllers through P1.</caption>
+<thead>
+<tr><th>Group</th><th>Family</th><th>PD (tracking-tuned) + inverse-dynamics feedforward</th><th>pd_shipped_feedforward</th><th>Oracle around the PD (privileged ceiling)</th><th>distill_yam_p1</th></tr>
+</thead>
+<tbody>
+<tr><td>In-distribution families</td><td>Hold (10 N pulses)</td><td>2.69 → 2.65</td><td>4.93 → 4.68</td><td>2.69 → 2.65</td><td>1.01 → 0.98</td></tr>
+<tr><td>In-distribution families</td><td>Free motion</td><td>1.77 → 1.78</td><td>2.18 → 2.44</td><td>1.77 → 1.78</td><td>1.79 → 1.78</td></tr>
+<tr><td>In-distribution families</td><td>Policy-like targets</td><td>2.30 → 2.16</td><td>3.49 → 3.49</td><td>2.30 → 2.16</td><td>2.30 → 2.16</td></tr>
+<tr><td>In-distribution families</td><td>Step targets</td><td>3.06 → 2.89</td><td>3.62 → 3.67</td><td>3.06 → 2.89</td><td>2.06 → 1.90</td></tr>
+<tr><td>In-distribution families</td><td>Contact (press, slide)</td><td>1.29 → 1.47</td><td>2.16 → 2.28</td><td>1.31 → 1.54</td><td>1.08 → 1.21</td></tr>
+<tr><td>In-distribution families</td><td>Blocked target</td><td>5.19 → 5.37</td><td>5.44 → 5.39</td><td>3.61 → 3.55</td><td>3.38 → 2.83</td></tr>
+<tr><td>In-distribution families</td><td>Task (held out)</td><td>1.92 → 2.01</td><td>3.34 → 3.40</td><td>1.70 → 1.78</td><td>1.00 → 1.14</td></tr>
+<tr><td>Compliant surface, 500 N/m (held out)</td><td>Contact (press, slide)</td><td>1.22 → 1.19</td><td>1.96 → 1.98</td><td>1.17 → 1.24</td><td>1.08 → 1.02</td></tr>
+<tr><td>Compliant surface, 500 N/m (held out)</td><td>Blocked target</td><td>2.58 → 2.52</td><td>2.43 → 2.23</td><td>1.45 → 1.48</td><td>2.63 → 1.38</td></tr>
+<tr><td>Compliant surface, 500 N/m (held out)</td><td>Task (held out)</td><td>1.44 → 1.47</td><td>2.23 → 2.27</td><td>1.40 → 1.48</td><td>0.69 → 0.79</td></tr>
+<tr><td>Task families (box pushing, pick-and-place)</td><td>Box pushing</td><td>0.59 → 0.60</td><td>1.09 → 0.99</td><td>0.59 → 0.60</td><td>0.59 → 0.56</td></tr>
+<tr><td>Task families (box pushing, pick-and-place)</td><td>Pick-and-place</td><td>4.18 → 4.20</td><td>7.30 → 7.10</td><td>4.18 → 4.20</td><td>0.71 → 0.80</td></tr>
+<tr><td>payload_1.5kg</td><td>Free motion</td><td>4.16 → 4.06</td><td>5.81 → 5.79</td><td>4.16 → 4.06</td><td>3.73 → 3.67</td></tr>
+<tr><td>payload_1.5kg</td><td>Contact (press, slide)</td><td>3.05 → 3.01</td><td>4.37 → 4.15</td><td>2.07 → 2.62</td><td>2.15 → 2.19</td></tr>
+<tr><td>payload_1.5kg</td><td>Blocked target</td><td>8.36 → 8.27</td><td>9.13 → 9.15</td><td>5.74 → 5.84</td><td>5.13 → 5.41</td></tr>
+<tr><td>payload_1.5kg</td><td>Task (held out)</td><td>4.49 → 4.23</td><td>6.15 → 6.04</td><td>3.04 → 2.83</td><td>2.43 → 2.45</td></tr>
+</tbody>
+</table><table class="wide">
+<caption>The sixteen in-distribution blocked test cases through P1: the normal force over the phase in which the reference is inside the surface, split into its first 0.5 s after the nominal contact, its middle and its last 0.5 s; the excess above the cap and where it falls; the time from the nominal contact until the force first stays under the cap for 0.2 s; the excess per evaluation payload.</caption>
+<thead>
+<tr><th>Controller</th><th>Mean force in the blocked phase (N)</th><th>Peak (N)</th><th>Mean force, first 0.5 s / middle / last 0.5 s (N)</th><th>Excess above 12 N (N)</th><th>Share of the excess, first 0.5 s / middle / last (%)</th><th>Time to settle under the cap (s)</th><th>Excess by payload, 0 / 1 / 2 kg (N)</th></tr>
+</thead>
+<tbody>
+<tr><td>PD (tracking-tuned) + inverse-dynamics feedforward</td><td>20.3</td><td>32</td><td>22.4 / 24.0 / 12.8</td><td>9.2</td><td>35 / 53 / 12</td><td>1.61</td><td>7.3 / 8.8 / 12.7</td></tr>
+<tr><td>Oracle around the PD (privileged ceiling)</td><td>16.8</td><td>30</td><td>17.7 / 19.0 / 12.8</td><td>5.5</td><td>44 / 45 / 10</td><td>0.57</td><td>0.9 / 5.3 / 12.7</td></tr>
+<tr><td>student_yam_p1</td><td>15.8</td><td>38</td><td>16.8 / 17.9 / 11.7</td><td>4.8</td><td>38 / 49 / 14</td><td>1.65</td><td>2.5 / 5.0 / 7.8</td></tr>
+</tbody>
+</table>
+
+<h2>8. What the representations encode</h2>
+<p>Linear probes from the observation and from every trunk layer, replayed through the profile on validation episodes, with a nonlinear probe beside the linear one. The deeper host-rate trunks decode contact at 0.84 to 0.94 balanced accuracy (the two-layer torque-interface student 0.77 to 0.80), the reference's depth inside the surface at R² 0.75 to 0.90 (the quantity the impedance law needs), sliding against pressing at 0.77 to 0.82, and the blocked and release phases at 0.85 to 0.97; the surface normal in the tool frame is readable from the observation and, on the YAM, from the layers (R² 0.42 to 0.66, 0.80 nonlinearly); the stiffness classes, the payload and the contact force are not linearly decodable from any layer. The block-in-the-gap probe before the grasp reads 0.88 to 0.97, but so does the observation (0.90): it reads the plan's phase, not the block.</p><table class="wide">
+<caption>The Panda P1 student: the extended probing targets, from the observation and from every trunk layer.</caption>
+<thead>
+<tr><th>Controller</th><th>Probe from</th><th>contact, MLP probe (bal. acc.)</th><th>normal, MLP probe (R²)</th><th>reference depth in the surface (R²)</th><th>depth, MLP probe (R²)</th><th>sliding vs pressing (bal. acc.)</th><th>blocked phase (bal. acc.)</th><th>release phase (bal. acc.)</th><th>block in the gap before the grasp (bal. acc.)</th></tr>
+</thead>
+<tbody>
+<tr><td>student_p1</td><td>observation</td><td>0.80</td><td>-0.23</td><td>0.66</td><td>-0.34</td><td>0.41</td><td>0.91</td><td>0.89</td><td>0.90</td></tr>
+<tr><td>student_p1</td><td>layer1</td><td>0.82</td><td>-0.64</td><td>0.80</td><td>0.82</td><td>0.77</td><td>0.90</td><td>0.80</td><td>0.88</td></tr>
+<tr><td>student_p1</td><td>layer2</td><td>0.82</td><td>-0.69</td><td>0.82</td><td>0.89</td><td>0.78</td><td>0.90</td><td>0.73</td><td>0.93</td></tr>
+<tr><td>student_p1</td><td>layer3</td><td>0.82</td><td>-0.45</td><td>0.75</td><td>0.80</td><td>0.59</td><td>0.85</td><td>0.68</td><td>0.93</td></tr>
+<tr><td>student_p1</td><td>layer4</td><td>0.82</td><td>-0.57</td><td>0.75</td><td>0.77</td><td>0.57</td><td>0.91</td><td>0.84</td><td>0.97</td></tr>
+</tbody>
+</table><table class="wide">
+<caption>The YAM student: the same targets.</caption>
+<thead>
+<tr><th>Controller</th><th>Probe from</th><th>contact, MLP probe (bal. acc.)</th><th>normal, MLP probe (R²)</th><th>reference depth in the surface (R²)</th><th>depth, MLP probe (R²)</th><th>sliding vs pressing (bal. acc.)</th><th>blocked phase (bal. acc.)</th><th>release phase (bal. acc.)</th><th>block in the gap before the grasp (bal. acc.)</th></tr>
+</thead>
+<tbody>
+<tr><td>student_yam_p1</td><td>observation</td><td>0.90</td><td>0.80</td><td>0.76</td><td>0.84</td><td>0.75</td><td>0.96</td><td>0.90</td><td>0.69</td></tr>
+<tr><td>student_yam_p1</td><td>layer1</td><td>0.92</td><td>0.57</td><td>0.88</td><td>0.85</td><td>0.80</td><td>0.91</td><td>0.91</td><td>0.93</td></tr>
+<tr><td>student_yam_p1</td><td>layer2</td><td>0.86</td><td>0.47</td><td>0.90</td><td>0.83</td><td>0.82</td><td>0.94</td><td>0.92</td><td>0.66</td></tr>
+<tr><td>student_yam_p1</td><td>layer3</td><td>0.81</td><td>0.55</td><td>0.87</td><td>0.84</td><td>0.80</td><td>0.96</td><td>0.92</td><td>0.62</td></tr>
+<tr><td>student_yam_p1</td><td>layer4</td><td>0.80</td><td>0.45</td><td>0.85</td><td>0.83</td><td>0.80</td><td>0.97</td><td>0.91</td><td>0.64</td></tr>
+</tbody>
+</table>
+
+<h2>9. Corrections made during the milestone</h2>
+<ul>
+<li><strong>The model-based interface did not advance the reference over the bus delay and the hold.</strong> Found by the error-floor decomposition; fixed to the middle of the hold (zero-order-hold compensation); every Phase 1 and 2 table re-run; the pre-fix results kept under runs/m11/pre_fix and not reported.</li>
+<li><strong>The torque-tracking metric's command ignored the reference's motion within a hold.</strong> Fixed: the command is the latest frame's law with the current reference at the true state, so the hold and the delay both count as error.</li>
+<li><strong>The oracle's frame path indexed its reference by call count.</strong> Through a profile it ran four times too slow; fixed to time indexing and the oracle rows re-evaluated.</li>
+<li><strong>Report 21's collection divergences were a flag's artefact.</strong> The free-space labelling path compared the labelled decisions with a tenth of the physics steps; at 50 Hz every episode tripped it. No episode diverged; the finding and its mechanism were withdrawn in an erratum, the flag now counts decisions.</li>
+</ul>
+
+<h2>10. Lessons</h2>
+<ul>
+<li><strong>Model the interface exactly before learning it.</strong> The learned interface's only apparent gain was the model's omission of the delay compensation; once the classical mapping was exact at the frame's arrival it sat at the servo's floor and the network found nothing below it. A learned interface is worth revisiting only on a servo whose loop the model gets wrong (friction, backlash, a firmware filter), which is what the DC-motor layer and hardware measurements are for.</li>
+<li><strong>Rebuild the controller at the host rate rather than wrap the 1 kHz one.</strong> The host-rate student, distilled from scratch through the profile with its history at the host rate, recovered the torque-interface controller's wins on hold, steps, tasks and the pick through every profile; deeper trunks encode contact sharper than the two-layer student.</li>
+<li><strong>The classical set must include the PD tuned through the profile.</strong> Softening is the classical answer to a position interface; it halves the blocked excess and the torque rate at the price of accuracy. The criterion's classical reference through a profile includes it.</li>
+<li><strong>A one-sided metric around a target at the cap punishes variance.</strong> The student's push error along the normal is unbiased, yet the excess above the cap grows with its spread, most under payload at the impact; a label term in force space addresses what the torque loss cannot see.</li>
+<li><strong>The torque rate through a position interface is structural.</strong> The held setpoint moves by the reference velocity times the period at every frame; neither a filtered velocity estimate nor a softer PD recovers the torque interface's smoothness. Only a firmware that interpolates the goal between frames would, and that is a measurement for later.</li>
+<li><strong>Check flags against the rate they were written for.</strong> A divergence threshold in physics steps read every 50 Hz episode as diverged and produced a confident mechanism for a non-event.</li>
+</ul>
+
+<h2>11. Next</h2>
+<ul>
+<li>The sustained-contact tasks proposed in the context document (wiping under a force band, drawer and door, chamfered peg insertion, an object along a wall, a lid, erasing with a held tool) are the task-level signal the milestone did not have.</li>
+<li>Inference time: the simulation paused for the network this round; the host-rate students' four layers of 256 at 250 Hz are the budget to meet, by distillation into a smaller network or by measurement on the host.</li>
+<li>The Dynamixel arm (Koch) on P2 with the XM430 constants identified on the public dataset, and with it the transfer check to a data-fitted actuator surrogate; deferred by the advisor's decision.</li>
+<li>Hardware measurements when allowed: the bus period and delay, the velocity estimate the firmware damps on, and whether the goal is interpolated between frames.</li>
+<li>A payload estimate as an explicit input (or a label term that makes the student infer it) for the blocked family under payload, where the oracle's privilege is the payload's weight along the normal.</li>
+</ul>

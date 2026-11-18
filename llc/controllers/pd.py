@@ -45,6 +45,12 @@ class PDGravity:
     def __call__(self, t, q, qd, q_ref, qd_ref, qdd_ref):
         return self.kp * (q_ref - q) + self.kd * (qd_ref - qd) + self.nominal.gravity(q)
 
+    def frame(self, t, q, qd, q_ref, qd_ref, qdd_ref) -> dict:
+        """The impedance frame of this law at a host instant (ADR 0011): its gains, the reference and its model term."""
+        from llc.sim.servo import make_frame
+
+        return make_frame(q_ref, qd_ref, self.kp, self.kd, self.base_term(q, qd_ref, qdd_ref))
+
 
 class PDFeedforward(PDGravity):
     """PD + gravity plus the nominal model's inverse-dynamics feedforward of the reference,

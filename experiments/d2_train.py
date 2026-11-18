@@ -30,7 +30,7 @@ from llc.learning.rollout import LossConfig
 from llc.learning.rollout_mj import rollout_mj
 from llc.sim.instances import sample_instance
 from llc.sim.nominal import NominalModel
-from llc.sim.panda import load_model
+from llc.sim.panda import NUM_JOINTS, load_model
 
 STAGES = [
     {"hold": 0.3, "free": 0.5, "policy": 0.2},
@@ -69,7 +69,7 @@ def warm_start(policy: Policy, pool: dict, steps: int, rng: np.random.Generator,
             qdd_ref = reference_accel(qd_ref, 1e-3)
             q, qd = torch.as_tensor(q0), torch.as_tensor(qd0)
             buf = HistoryBuffer(policy.cfg, q, qd, model.inverse_dynamics if policy.cfg.ext_torque else None, 1e-3)
-            last_tau = torch.zeros(32, 7)
+            last_tau = torch.zeros(32, NUM_JOINTS)
             for k in range(q_ref.shape[1]):
                 buf.push(q, qd, last_tau, q_ref[:, k])
                 g = model.inverse_dynamics(q, qd_ref[:, k], qdd_ref[:, k]) if feedforward else model.bias(q, torch.zeros_like(q))
@@ -108,6 +108,9 @@ def main() -> None:
     ap.add_argument("--feas-sigma", type=float, default=None)
     ap.add_argument("--ext-torque", action="store_true", help="external-torque estimate from the robot model in the history")
     ap.add_argument("--feedforward", action="store_true", help="PD base with the nominal inverse-dynamics feedforward of the reference (ADR 0010 round 2)")
+    ap.add_argument("--layers", type=int, default=2, help="trunk depth (ADR 0012: 4 and 10)")
+    ap.add_argument("--hidden", type=int, default=128)
+    ap.add_argument("--residual-blocks", action="store_true", help="residual trunk with layer normalisation (ADR 0012, the 10-layer student)")
     ap.add_argument("--output-tau", type=float, default=0.0, help="s; first-order low-pass of the held output at the physics rate")
     ap.add_argument("--residual-fraction", type=float, default=0.5)
     ap.add_argument("--val-cases-contact", type=int, default=None, help="validation cases per surface family (default: --val-cases)")
@@ -162,7 +165,8 @@ def main() -> None:
     shared = json.load(open(args.gains))["spec"]
     cfg = PolicyConfig(kind=args.kind, history=args.history, history_stride=args.history_stride, history_dense=args.history_dense, rate_hz=1000.0, latency_s=0.0,
                        encoding=args.encoding, inertia_diag=tuple(inertia.tolist()), kp_shared=tuple(shared["kp"]), kd_shared=tuple(shared["kd"]), ref_history=args.ref_history,
-                       ext_torque=args.ext_torque, output_tau=args.output_tau, residual_fraction=args.residual_fraction, feedforward=args.feedforward)
+                       ext_torque=args.ext_torque, output_tau=args.output_tau, residual_fraction=args.residual_fraction, feedforward=args.feedforward,
+                       layers=args.layers, hidden=args.hidden, residual_blocks=args.residual_blocks)
     policy = Policy(cfg)
     stages = MIXES[args.mix]
     init_critic = None

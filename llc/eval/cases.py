@@ -13,7 +13,8 @@ import numpy as np
 
 from llc import references as R
 from llc.sim.nominal import NominalModel
-from llc.sim.panda import DynamicsPerturbation
+from llc.sim.panda import NUM_JOINTS, DynamicsPerturbation
+from llc.sim.plant import PLANT
 
 REGIMES = ("hold", "smooth", "zoh", "step", "contact", "transition")
 SPLIT_OFFSET = {"tune": 0, "val": 1000, "test": 2000, "train": 10000}
@@ -58,7 +59,7 @@ def make_case(regime: str, split: str, index: int, nominal: NominalModel,
         ref = R.hold(rng, nominal)
         direction = rng.normal(size=3)
         direction /= np.linalg.norm(direction)
-        pulse = Pulse(1.0, 0.2, tuple(10.0 * direction))
+        pulse = Pulse(1.0, 0.2, tuple(PLANT.pulse_force * direction))
         meta["pulse_force_N"] = 10.0
     elif regime == "smooth":
         speed = rng.uniform(0.2, 0.6) * speed_scale
@@ -80,7 +81,7 @@ def make_case(regime: str, split: str, index: int, nominal: NominalModel,
         tool_ref = np.array([nominal.tool_pos(ref.q[i]) for i in range(0, len(ref.q), 10)])
         tool_ref = np.array([np.interp(ref.t, ref.t[::10], tool_ref[:, j]) for j in range(3)]).T
     meta["tool_ref"] = tool_ref
-    return Case(f"{regime}-{split}-{index:03d}", regime, seed, ref, ref.q[0].copy(), np.zeros(7), pulse,
+    return Case(f"{regime}-{split}-{index:03d}", regime, seed, ref, ref.q[0].copy(), np.zeros(NUM_JOINTS), pulse,
                 perturbation or DynamicsPerturbation(), meta)
 
 

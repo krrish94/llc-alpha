@@ -30,26 +30,39 @@ import numpy as np
 
 from llc.learning.data import surface_depth
 from llc.sim.nominal import NominalModel
+from llc.sim.plant import PLANT
 
-ORACLE_DEFAULTS = {"k_n": 500.0, "f_min": 5.0, "f_cap": 15.0, "zeta": 0.7, "k_t": 1000.0, "blend": 0.2}
+ORACLE_DEFAULTS = {"k_n": 500.0, "f_min": PLANT.press_min, "f_cap": PLANT.force_cap, "zeta": 0.7, "k_t": 1000.0, "blend": 0.2}  # the plant's force scale (ADR 0011)
 
 
 class ContactImpedanceOracle:
     name = "oracle"
 
-    def __init__(self, base, nominal: NominalModel, tool_ref: np.ndarray, normal, surface: str, hold_tangent: bool,
+    def __init__(self, base, nominal: NominalModel, tool_ref: np.ndarray, normal, surface: str | None, hold_tangent: bool,
                  k_n: float = 500.0, f_min: float = 5.0, f_cap: float = 15.0, zeta: float = 0.7, k_t: float = 1000.0,
-                 blend: float = 0.2, contact_eps: float = 1e-3, dt: float = 1e-3, payload_mass: float = 0.0):
+                 blend: float = 0.2, contact_eps: float = 1e-3, dt: float = 1e-3, payload_mass: float = 0.0, plane_point=None, soft_tangent: bool = False, k_soft: float = 100.0):
         self.base, self.nominal = base, nominal
         self.weight_in = float(payload_mass * 9.81 * np.asarray(normal, float)[2])  # the payload weight's push into the surface (N)
         self.normal = np.asarray(normal, float)
         self.surface, self.hold_tangent = surface, hold_tangent
+        # The surface is a plane: a point on it and the outward normal (ADR 0012: the table's or the wall's plane, or any plane a
+        # task names, such as a held block's contact plane, the hole's top plane for the hanging peg, a drawer's or a door's stop)
+        self.plane_point = None if plane_point is None else np.asarray(plane_point, float)
+        self.soft_tangent = soft_tangent  # while inside: a weak spring toward the reference across the normal instead of the base's stiffness (the chamfer guides the peg)
+        self.k_soft = k_soft
         self.tool_ref = np.asarray(tool_ref, float)
-        self.depth_ref = surface_depth(self.tool_ref, surface)
+        self.depth_ref = self._depth(self.tool_ref)
         self.k_n, self.f_min, self.f_cap, self.zeta, self.k_t = k_n, f_min, f_cap, zeta, k_t
         self.blend_steps = max(1, int(round(blend / dt)))
         self.contact_eps = contact_eps
+        self.dt = dt
         self.reset()
+
+    def _depth(self, p: np.ndarray) -> np.ndarray:
+        """Signed depth of tool points (N, 3) behind the surface plane, positive inside."""
+        if self.plane_point is None:
+            return surface_depth(p, self.surface)
+        return (self.plane_point[None, :] - p) @ self.normal
 
     def reset(self) -> None:
         self.base.reset()
@@ -59,22 +72,38 @@ class ContactImpedanceOracle:
         self.push = 0.0  # last commanded pushing force (N), for analysis
 
     def __call__(self, t, q, qd, q_ref, qd_ref, qdd_ref):
-        tau_base = self.base(t, q, qd, q_ref, qd_ref, qdd_ref)
+        return self._apply(self.base(t, q, qd, q_ref, qd_ref, qdd_ref), t, q, qd, q_ref, qd_ref, qdd_ref)
+
+    def frame(self, t, q, qd, q_ref, qd_ref, qdd_ref, **kw) -> dict:
+        """The base's frame with its feedforward term adjusted so that the frame's law at this state is the oracle's
+        torque (ADR 0011): the base's spring holds between host frames, the oracle's force is exact at the instant.
+        The base's torque at this state is its frame's own law, so the base decides once."""
+        from llc.sim.servo import frame_law
+
+        fr = self.base.frame(t, q, qd, q_ref, qd_ref, qdd_ref, **kw)
+        tau = self._apply(frame_law(fr, q, qd), t, q, qd, q_ref, qd_ref, qdd_ref)
+        fr["tau_ff"] = tau - fr["kp"] * (fr["q_des"] - q) - fr["kd"] * (fr["qd_des"] - qd)
+        return fr
+
+    def _apply(self, tau_base, t, q, qd, q_ref, qd_ref, qdd_ref):
+        """The oracle's torque given the base's torque at this state. The reference is indexed by the call's time, not by a
+        call counter: through a servo profile the oracle is called once per host frame (ADR 0011)."""
+        self.k = int(round(t / self.dt))
         k = min(self.k, len(self.depth_ref) - 1)
-        self.k += 1
         inside = bool(self.depth_ref[k] > 0.0)
         if not inside and self.anchor is None:
             self.push = 0.0
             return tau_base
         x = self.nominal.tool_pos(q)
         if inside and self.anchor is None:
-            if surface_depth(x[None], self.surface)[0] <= -self.contact_eps:
+            if self._depth(x[None])[0] <= -self.contact_eps:
                 self.push = 0.0
                 return tau_base  # the tool has not reached the surface yet: the approach is the base's
             self.anchor = x.copy()
+        tool_inside = bool(self._depth(x[None])[0] > 0.0)
         if inside:
             self.release_k = None
-        elif self.release_k is None:
+        elif self.release_k is None and not (self.soft_tangent and tool_inside):  # a soft-tangent oracle stays engaged while the tool is still inside (the peg's extraction)
             self.release_k = k
         n = self.normal
         J, _ = self.nominal.tool_jacobian(q)
@@ -94,6 +123,11 @@ class ContactImpedanceOracle:
             m_t = max(1e-6, float(np.trace(P @ lam @ P)) / 2.0)
             d_t = 2.0 * self.zeta * np.sqrt(self.k_t * m_t)
             f_new = -n * push_cmd + self.k_t * (P @ (self.anchor - x)) - d_t * (P @ v)
+        elif self.soft_tangent and (inside or tool_inside):
+            P = np.eye(3) - np.outer(n, n)
+            m_t = max(1e-6, float(np.trace(P @ lam @ P)) / 2.0)
+            d_t = 2.0 * self.zeta * np.sqrt(self.k_soft * m_t)
+            f_new = -n * push_cmd + self.k_soft * (P @ (self.tool_ref[k] - x)) - d_t * (P @ v)
         tau = tau_base + J.T @ (f_new - f)
         if self.release_k is not None:
             a = min(1.0, (k - self.release_k) / self.blend_steps)
@@ -103,9 +137,15 @@ class ContactImpedanceOracle:
         return tau
 
 
+
 def oracle_for_case(base, nominal: NominalModel, case, dt: float = 1e-3, **params):
     """The oracle around ``base`` for a case; cases without a surface get the base itself."""
     normal, surface, tool_ref = case.meta.get("normal"), case.meta.get("surface"), case.meta.get("tool_ref")
-    if normal is None or surface is None or tool_ref is None:
+    plane = case.meta.get("oracle_plane")  # protocol v5 tasks name the plane the oracle acts on (ADR 0012)
+    if normal is None or tool_ref is None or (surface is None and plane is None):
         return base
-    return ContactImpedanceOracle(base, nominal, tool_ref, normal, surface, hold_tangent=(case.regime == "blocked"), dt=dt, payload_mass=float(case.perturbation.payload_mass), **{**ORACLE_DEFAULTS, **params})
+    extra = {"plane_point": plane, "soft_tangent": bool(case.meta.get("oracle_soft_tangent", False))}
+    if case.meta.get("oracle_contact_eps") is not None:  # how far from the plane the tool counts as having reached it (a panel's stop, a held block)
+        extra["contact_eps"] = float(case.meta["oracle_contact_eps"])
+    return ContactImpedanceOracle(base, nominal, tool_ref, normal, surface, hold_tangent=(case.regime == "blocked"), dt=dt, payload_mass=float(case.perturbation.payload_mass),
+                                  **{**ORACLE_DEFAULTS, **params, **extra})

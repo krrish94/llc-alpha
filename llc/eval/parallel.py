@@ -32,6 +32,9 @@ class CaseSpec:
     ood_instance: bool = False
     payload: float | None = None
     surface_stiffness: float | None = None  # N/m effective; compliant table and wall (ADR 0008)
+    dist: str = "v3"  # "v5": the Milestone 12 training distribution on the train split (ADR 0012)
+    base_scale: float | None = None  # the learned controllers' base PD stiffness multiplier (held-out stiffness groups; damping by its square root)
+    lag: float | None = None  # s; the actuator-lag group of protocol v5 (with a 5 ms transport delay)
 
     @property
     def id(self) -> str:
@@ -58,7 +61,7 @@ def _get_sim(perturbation: DynamicsPerturbation, seed: int, scene: str | None = 
 
 
 def _get_case(spec: CaseSpec) -> Case:
-    key = (spec.protocol, spec.regime, spec.split, spec.index, spec.speed_scale, spec.heldout_workspace, spec.ood_instance, spec.payload, spec.surface_stiffness)
+    key = (spec.protocol, spec.regime, spec.split, spec.index, spec.speed_scale, spec.heldout_workspace, spec.ood_instance, spec.payload, spec.surface_stiffness, spec.dist, spec.base_scale, spec.lag)
     if key not in _worker["cases"]:
         if len(_worker["cases"]) > 64:
             _worker["cases"].clear()
@@ -66,7 +69,8 @@ def _get_case(spec: CaseSpec) -> Case:
             from llc.eval.cases_v2 import make_case_v2
 
             _worker["cases"][key] = make_case_v2(spec.regime, spec.split, spec.index, _worker["nominal"], speed_scale=spec.speed_scale,
-                                                 heldout_workspace=spec.heldout_workspace, payload=spec.payload, ood_instance=spec.ood_instance, surface_stiffness=spec.surface_stiffness)
+                                                 heldout_workspace=spec.heldout_workspace, payload=spec.payload, ood_instance=spec.ood_instance, surface_stiffness=spec.surface_stiffness,
+                                                 dist=spec.dist, base_scale=spec.base_scale, lag=spec.lag)
         else:
             _worker["cases"][key] = make_case(spec.regime, spec.split, spec.index, _worker["nominal"], speed_scale=spec.speed_scale)
     case = _worker["cases"][key]
@@ -116,16 +120,22 @@ def mean_composite(results: list[dict]) -> float:
     return float(np.mean([r["composite"] for r in results]))
 
 
-def validate_policy(ckpt_path, n_free: int, n_contact: int, objective: str = "composite", workers: int | None = None) -> dict:
+def validate_policy(ckpt_path, n_free: int, n_contact: int, objective: str = "composite", workers: int | None = None, servo: dict | None = None, families=None) -> dict:
     """Validation of a learned checkpoint on the protocol v2 'val' split: ``n_free`` cases per free-space
-    family, ``n_contact`` per surface family; the mean over families of the per-family mean of
-    ``objective`` ("composite" or "composite_cap"), the force statistics and the cap/reflex counts."""
+    family, ``n_contact`` per surface or task family; the mean over families of the per-family mean of
+    ``objective`` ("composite" or "composite_cap"), the force statistics and the cap/reflex counts.
+    ``families`` (ADR 0012): the families validated (default: the seven of protocol v2)."""
     from llc.eval.cases_v2 import REGIMES_V2
     from llc.eval.metrics import FORCE_CAP, REFLEX_SUSTAINED
 
-    surface = ("contact2", "blocked", "task")
-    cases = [CaseSpec(r, "val", i, protocol="v2") for r in REGIMES_V2 for i in range(n_contact if r in surface else n_free)]
-    res = evaluate({"c": {"kind": "learned", "path": str(ckpt_path)}}, cases, workers=workers or int(os.environ.get("LLC_VAL_WORKERS", "0")) or None)["c"]
+    REGIMES_V2 = tuple(families) if families else REGIMES_V2
+    free_families = ("hold", "free", "policy", "step")
+    surface = tuple(r for r in REGIMES_V2 if r not in free_families)  # the contact and task families (their press force is reported)
+    cases = [CaseSpec(r, "val", i, protocol="v2") for r in REGIMES_V2 for i in range(n_free if r in free_families else n_contact)]
+    spec = {"kind": "learned", "path": str(ckpt_path)}
+    if servo:  # ADR 0011: through the profile's servo loop
+        spec = {"kind": "servo", "profile": servo["profile"], "overrides": servo.get("overrides", {}), "inner": spec, "interface": servo.get("interface", "model"), "kp": servo["kp"], "kd": servo["kd"]}
+    res = evaluate({"c": spec}, cases, workers=workers or int(os.environ.get("LLC_VAL_WORKERS", "0")) or None)["c"]
     key = "composite_cap" if objective == "free" else objective
     per = {r: float(np.mean([m[key] for m in res if m["regime"] == r])) for r in REGIMES_V2}
     selected = [r for r in REGIMES_V2 if r in ("hold", "free", "policy", "step")] if objective == "free" else list(REGIMES_V2)  # "free": selection on the free-space families (ADR 0010 round 2)

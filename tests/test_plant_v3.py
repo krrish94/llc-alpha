@@ -78,7 +78,7 @@ def test_v3_task_families_run_and_report_their_metrics():
 
     nominal = NominalModel()
     spec = json.load(open("runs/d1/gains_shared.json"))["spec"]
-    for regime, keys in (("push", ("push_error", "push_lateral", "push_yaw", "object_force_peak_20ms", "task_success")), ("pick", ("place_error", "place_tilt", "place_force_peak_20ms", "lift_rmse", "task_success"))):
+    for regime, keys in (("push", ("push_error", "push_lateral", "push_yaw", "object_force_peak_20ms", "task_success")), ("pick", ("grasp_success", "pregrasp_disturbance", "place_error", "place_tilt", "place_force_peak_20ms", "lift_rmse", "task_success"))):
         case = make_case_v2(regime, "test", 0, nominal)
         task = case.meta["task"]
         ep = rollout(PandaSim(case.perturbation, seed=case.seed, scene=task["scene"]), build_controller(spec, nominal, case), case)

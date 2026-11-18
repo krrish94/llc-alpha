@@ -1,0 +1,24 @@
+<figure class="video wide" id="fig-video-pick_payload">
+<video id="fig-video-pick_payload-video" controls preload="metadata" poster="media/pick_payload-middle.png">
+<source src="media/pick_payload.mp4" type="video/mp4">
+<p class="missing">Video playback is not supported here; <a href="media/pick_payload.mp4">download the video (MP4)</a>.</p>
+</video>
+<div class="widget timeseries" data-widget="timeseries" data-src="data/ts_pick_payload.json" data-video="fig-video-pick_payload-video" data-video-speed="1">
+<div class="widget-body">
+<p class="missing">No static figure for this viewer; the interactive view needs JavaScript.</p>
+</div>
+</div>
+<figcaption>Pick-and-place with a grasp, real time, case pick-test-002, with the 2 kg tool payload of its instance: the lowest-index such case among the 4 of 16 where the feedforward PD misses the grasp and the student takes it. The gray sphere is the commanded tool point; the force plot is the tool-block contact force. The PD sags under the unmodelled payload (10 to 19 mm over the family) and the block's centre is outside the 6 mm by 9 mm tolerance at the grasp instant, so the weld never activates and the block stays; the student infers the payload from the history, grasps, lifts, carries and places. The gray sphere is the commanded tool point; the metrics under each view accumulate causally; the plot cursor follows the video. <a class="source" href="media/pick_payload.mp4">Video (MP4)</a> <a class="source" href="data/ts_pick_payload.json">Data (JSON)</a></figcaption>
+</figure>
+<figure class="video wide" id="fig-video-pick_plain">
+<video id="fig-video-pick_plain-video" controls preload="metadata" poster="media/pick_plain-middle.png">
+<source src="media/pick_plain.mp4" type="video/mp4">
+<p class="missing">Video playback is not supported here; <a href="media/pick_plain.mp4">download the video (MP4)</a>.</p>
+</video>
+<div class="widget timeseries" data-widget="timeseries" data-src="data/ts_pick_plain.json" data-video="fig-video-pick_plain-video" data-video-speed="1">
+<div class="widget-body">
+<p class="missing">No static figure for this viewer; the interactive view needs JavaScript.</p>
+</div>
+</div>
+<figcaption>The same family without a tool payload, real time, case pick-test-001 (the lowest-index case without payload that the PD grasps): the PD arrives within 1 mm and grasps; the student arrives with 4 to 6 mm of lateral error, its pads brush the block during the descent (6 to 9 N on the block) and its contact law yields, so it stops 18 mm above the grasp height and never takes the block. The contact compliance that wins the blocked family loses a grasp that touches its object on the way in. The gray sphere is the commanded tool point; the metrics under each view accumulate causally; the plot cursor follows the video. <a class="source" href="media/pick_plain.mp4">Video (MP4)</a> <a class="source" href="data/ts_pick_plain.json">Data (JSON)</a></figcaption>
+</figure>
